@@ -18,10 +18,12 @@
 sudo apt update && sudo apt upgrade -y
 
 # Install system dependencies
+# NOTE: install espeak-ng (not espeak). pyttsx3's espeak driver is broken
+# on Python 3.13+ — the project calls espeak-ng directly via subprocess.
 sudo apt install -y \
     python3-pip python3-venv \
     libopencv-dev python3-opencv \
-    espeak espeak-data \
+    espeak-ng \
     libportaudio2 portaudio19-dev \
     pulseaudio pulseaudio-module-bluetooth \
     bluez bluez-tools \
@@ -108,8 +110,8 @@ bluetoothctl
 pactl list sinks short
 pactl set-default-sink bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink
 
-# Test TTS over Bluetooth
-python3 -c "import pyttsx3; e=pyttsx3.init(); e.say('Hello world'); e.runAndWait()"
+# Test TTS over Bluetooth (using espeak-ng directly — pyttsx3 not needed on RPi)
+espeak-ng "Hello world"
 ```
 
 ---
@@ -228,5 +230,6 @@ sudo systemctl start nav-assistant
 | Webcam not found | Check `ls /dev/video*`, try `--webcam-index 1` |
 | ToF camera fails to open | Verify CSI ribbon connected, run `dmesg | grep arducam` |
 | No audio output | Check `pactl list sinks`, verify BT device is connected |
-| pyttsx3 espeak error | Run `sudo apt install espeak` |
+| espeak-ng not found | Run `sudo apt install espeak-ng` |
+| pyttsx3 voice error | Do not use pyttsx3 on RPi — the project uses `espeak-ng` directly |
 | Low FPS / high CPU | Reduce `orb_n_features` in `config/default.yaml` |
