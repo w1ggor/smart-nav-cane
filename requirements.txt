@@ -1,0 +1,27 @@
+# Core
+opencv-python>=4.8.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Data storage
+# sqlite3 is built into Python — no extra package needed
+
+# Graph / routing
+networkx>=3.1
+
+# Configuration
+PyYAML>=6.0
+
+# Audio guidance (Phase 4)
+pyttsx3>=2.90
+pygame>=2.5.0
+
+# Arducam ToF SDK — install manually from source on RPi:
+# https://github.com/ArduCAM/Arducam_tof_camera
+# The pip package name on PyPI is: ArducamDepthCamera
+# Uncomment when running on Raspberry Pi:
+# ArducamDepthCamera
+
+# Development / testing
+pytest>=7.4.0
+pytest-mock>=3.11.0

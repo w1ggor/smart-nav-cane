@@ -1,0 +1,42 @@
+webcam:
+  device_index: 0
+  width: 640
+  height: 480
+  fps: 30
+
+tof:
+  # Connection type: "csi" or "usb"
+  connection: csi
+  device_index: 0
+  # Depth values beyond this (meters) are treated as "clear"
+  max_range: 4.0
+  # Timeout waiting for a frame (milliseconds)
+  frame_timeout_ms: 200
+
+obstacle:
+  # Minimum depth (meters) before an obstacle alert is triggered
+  alert_threshold_m: 1.2
+  # Central zone of the depth frame used for forward-obstacle detection
+  # Fraction of width/height from center: 0.33 = middle third
+  detection_zone_fraction: 0.33
+
+localization:
+  # ORB feature count per frame
+  orb_n_features: 500
+  # Lowe's ratio test threshold
+  match_ratio: 0.75
+  # Minimum number of good matches to consider a waypoint recognized
+  min_good_matches: 15
+  # Confidence score (0–1) above which we commit to a localization
+  confidence_threshold: 0.6
+
+audio:
+  # TTS engine: "espeak" or "sapi5" (Windows) or "nsss" (macOS)
+  engine: espeak
+  rate: 150
+  volume: 1.0
+  # Obstacle alert sound file (relative to project root)
+  alert_sound: config/alert.wav
+
+data:
+  environments_dir: data/environments

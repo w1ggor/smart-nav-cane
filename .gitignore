@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment data (large binary files — commit only metadata)
+data/environments/*.npy
+data/environments/*.db
+# Keep the directory
+!data/environments/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Config overrides (may contain local paths)
+config/local.yaml
+
+# Claude Code local settings
+.claude/
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
