@@ -23,8 +23,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import cv2
 import numpy as np
 
+import yaml
+
 from nav_assistant.sensors.webcam import WebcamSensor
 from nav_assistant.sensors.tof import ToFSensor
+
+_CONFIG_PATH = Path(__file__).parent.parent / "config" / "default.yaml"
+
+
+def _load_config() -> dict:
+    with open(_CONFIG_PATH) as f:
+        return yaml.safe_load(f)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,8 +108,12 @@ def test_tof(mock: bool = False, n_frames: int = 20) -> bool:
 
 
 def main() -> None:
+    cfg = _load_config()
+    default_webcam_index = cfg.get("webcam", {}).get("device_index", 1)
+
     parser = argparse.ArgumentParser(description="Validate webcam and ToF sensors")
-    parser.add_argument("--webcam-index", type=int, default=0)
+    parser.add_argument("--webcam-index", type=int, default=default_webcam_index,
+                        help=f"Webcam device index (default from config: {default_webcam_index})")
     parser.add_argument("--tof-mock", action="store_true", help="Run ToF in mock mode")
     parser.add_argument("--show", action="store_true", help="Show webcam frames in a window")
     parser.add_argument("--skip-webcam", action="store_true")

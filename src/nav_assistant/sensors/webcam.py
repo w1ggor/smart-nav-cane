@@ -48,11 +48,10 @@ class WebcamSensor(ISensor):
         logger.info("Opening webcam device %d (%dx%d @ %d fps)",
                     self._device_index, self._width, self._height, self._fps)
 
-        self._cap = cv2.VideoCapture(self._device_index, cv2.CAP_V4L2)
-
-        if not self._cap.isOpened():
-            # Fallback: try without backend hint (works on Windows/macOS)
-            self._cap = cv2.VideoCapture(self._device_index)
+        # Use the default backend — OpenCV picks V4L2 on Linux automatically.
+        # Forcing cv2.CAP_V4L2 explicitly can make unrelated CSI devices appear
+        # to open (isOpened returns True) while returning no frames.
+        self._cap = cv2.VideoCapture(self._device_index)
 
         if not self._cap.isOpened():
             raise SensorError(

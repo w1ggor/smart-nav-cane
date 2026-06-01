@@ -236,8 +236,11 @@ pactl set-default-sink bluez_sink.<MAC>
 ### USB Webcam is NOT /dev/video0 on RPi with CSI camera attached
 When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device, not the USB webcam. The C270 USB webcam lands at `/dev/video1`. Always run `v4l2-ctl --list-devices` first and set `webcam.device_index` in `config/default.yaml` accordingly. Default is now `1` for this hardware setup.
 
-### Arducam SDK DeviceType.TOF attribute name varies by SDK version
-The `DeviceType` enum has been renamed across Arducam SDK releases (`TOF`, `Tof`, `ARDUCAM_TOF`). The tof.py module now uses `_resolve_device_type()` which tries all known names in order and falls back to integer `0` (the underlying C++ enum value, stable across all releases).
+### Arducam SDK: start() takes FrameType, not DeviceType — and FrameType.DEPTH is the correct value
+`camera.start()` requires a `FrameType` argument, not `DeviceType`. In the installed SDK, `DeviceType` is actually a frame-resolution enum (`HQVGA`, `VGA`) with no relation to depth mode. The correct call is `camera.start(FrameType.DEPTH)`. The module now imports `FrameType` and uses `_resolve_frame_type()` which tries `DEPTH`, `Depth`, `HQVGA`, `VGA` in order.
+
+### cv2.CAP_V4L2 hint makes CSI unicam appear to open — use default backend
+Explicitly passing `cv2.CAP_V4L2` to `VideoCapture` causes the CSI unicam device (`/dev/video0`) to report `isOpened() == True` while returning no frames. Using `cv2.VideoCapture(index)` with no backend hint lets OpenCV auto-select V4L2, which only opens devices that actually stream. Removed the explicit backend hint from `WebcamSensor.open()`.
 
 ### UVC webcam returns empty frames immediately after open
 USB webcams on Linux (V4L2) often return black/empty frames for the first few reads while the sensor initializes. Fix: call `cap.grab()` 5 times after opening to flush the initial empty frames before the first real `read()`.

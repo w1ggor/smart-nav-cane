@@ -25,11 +25,7 @@ logger = logging.getLogger(__name__)
 # Attempt to import the Arducam SDK. If unavailable (e.g. dev machine),
 # _SDK_AVAILABLE is False and the sensor runs in mock mode.
 try:
-    from ArducamDepthCamera import ArducamCamera, Connection, DeviceType
-    try:
-        from ArducamDepthCamera import FrameType
-    except ImportError:
-        FrameType = None  # not present in all SDK versions
+    from ArducamDepthCamera import ArducamCamera, Connection, FrameType
     _SDK_AVAILABLE = True
 except ImportError:
     _SDK_AVAILABLE = False
@@ -39,31 +35,25 @@ except ImportError:
     )
 
 
-def _resolve_device_type():
+def _resolve_frame_type():
     """
-    Return the correct DeviceType enum value for ToF acquisition.
+    Return the correct FrameType enum value for depth acquisition.
 
-    The Arducam SDK has shipped different attribute names across versions:
-      - DeviceType.TOF        (older releases)
-      - DeviceType.Tof        (some intermediate releases)
-      - DeviceType.ARDUCAM_TOF (some newer releases)
-
-    We try each in order and fall back to integer 0 as a last resort.
+    camera.start() expects a FrameType, not a DeviceType. Across SDK versions
+    the depth frame type has been named differently — try each known name.
     """
     if not _SDK_AVAILABLE:
-        return 0
-    for name in ("TOF", "Tof", "tof", "ARDUCAM_TOF", "Arducam_ToF"):
-        val = getattr(DeviceType, name, None)
+        return None
+    for name in ("DEPTH", "Depth", "depth", "HQVGA", "VGA"):
+        val = getattr(FrameType, name, None)
         if val is not None:
-            logger.debug("DeviceType resolved: DeviceType.%s = %r", name, val)
+            logger.debug("FrameType resolved: FrameType.%s = %r", name, val)
             return val
-    # Last resort: raw integer — the C++ enum value for TOF is 0 in all known versions
     logger.warning(
-        "Could not find DeviceType.TOF in installed SDK (attrs: %s). "
-        "Falling back to integer 0.",
-        [a for a in dir(DeviceType) if not a.startswith("_")],
+        "Could not resolve FrameType for depth mode. Available attrs: %s",
+        [a for a in dir(FrameType) if not a.startswith("_")],
     )
-    return 0
+    return None
 
 
 @dataclass
@@ -160,8 +150,14 @@ class ToFSensor(ISensor):
                 f"index={self._device_index}). Error code: {ret}"
             )
 
-        device_type = _resolve_device_type()
-        ret = self._cam.start(device_type)
+        frame_type = _resolve_frame_type()
+        if frame_type is None:
+            self._cam.close()
+            raise SensorError(
+                "Cannot determine FrameType for depth acquisition. "
+                "Check ArducamDepthCamera SDK installation."
+            )
+        ret = self._cam.start(frame_type)
         if ret != 0:
             self._cam.close()
             raise SensorError(f"Failed to start ToF acquisition. Error code: {ret}")
