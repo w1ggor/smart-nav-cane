@@ -70,6 +70,11 @@ class WebcamSensor(ISensor):
         actual_h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         logger.info("Webcam opened — actual resolution: %dx%d", actual_w, actual_h)
 
+        # Discard the first few frames while the camera sensor warms up.
+        # UVC cameras often return empty/black frames immediately after open.
+        for _ in range(5):
+            self._cap.grab()
+
     def read(self) -> SensorFrame:
         if not self.is_open:
             raise SensorError("Webcam is not open. Call open() first.")
