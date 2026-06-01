@@ -55,7 +55,12 @@ class WebcamSensor(ISensor):
             self._cap = cv2.VideoCapture(self._device_index)
 
         if not self._cap.isOpened():
-            raise SensorError(f"Cannot open webcam at device index {self._device_index}")
+            raise SensorError(
+                f"Cannot open webcam at device index {self._device_index} "
+                f"(/dev/video{self._device_index}). "
+                "Run 'v4l2-ctl --list-devices' to find the correct index, "
+                "then set webcam.device_index in config/default.yaml."
+            )
 
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)

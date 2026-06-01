@@ -233,6 +233,9 @@ pactl set-default-sink bluez_sink.<MAC>
 
 ## Lessons Learned
 
+### USB Webcam is NOT /dev/video0 on RPi with CSI camera attached
+When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device, not the USB webcam. The C270 USB webcam lands at `/dev/video1`. Always run `v4l2-ctl --list-devices` first and set `webcam.device_index` in `config/default.yaml` accordingly. Default is now `1` for this hardware setup.
+
 ### pyttsx3 broken on Python 3.13 + espeak-ng (RPi OS Bookworm)
 `pyttsx3`'s espeak driver hardcodes the voice name `gmw/en` which doesn't exist in `espeak-ng`. This raises `ValueError: SetVoiceByName failed` on init. **Fix:** call `espeak-ng` directly via `subprocess` on Linux — no pyttsx3 needed. pyttsx3 is kept as a fallback for macOS/Windows only. The `AudioGuidance` class auto-detects the backend at import time using `shutil.which("espeak-ng")`.
 

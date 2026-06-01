@@ -116,7 +116,30 @@ espeak-ng "Hello world"
 
 ---
 
-## 6. Validate Sensors
+## 6. Find Camera Device Indices
+
+Before running any scripts, confirm which `/dev/videoX` device is your USB webcam:
+
+```bash
+v4l2-ctl --list-devices
+```
+
+On a Raspberry Pi 4 with the Arducam ToF on CSI and a USB webcam, you will typically see:
+
+```
+unicam (platform:fe801000.csi):     → /dev/video0  (CSI — ToF camera)
+C270 HD WEBCAM (usb-...):           → /dev/video1  (USB webcam)  ← use this
+                                       /dev/video2
+```
+
+Update `config/default.yaml` if the index differs:
+
+```yaml
+webcam:
+  device_index: 1   # set to whichever index matches your USB webcam
+```
+
+## 7. Validate Sensors
 
 ```bash
 # Run from project root with venv active
@@ -141,7 +164,7 @@ Expected output:
 
 ---
 
-## 7. Running Training Mode
+## 8. Running Training Mode
 
 ```bash
 source .venv/bin/activate
@@ -157,7 +180,7 @@ python scripts/train.py --env my_home
 
 ---
 
-## 8. Running Navigation Mode
+## 9. Running Navigation Mode
 
 ```bash
 source .venv/bin/activate
@@ -168,7 +191,7 @@ Press `Ctrl+C` to stop navigation.
 
 ---
 
-## 9. Performance Tuning
+## 10. Performance Tuning
 
 ```bash
 # Check CPU temperature during operation
@@ -193,7 +216,7 @@ dtoverlay=vc4-kms-v3d
 
 ---
 
-## 10. Auto-Start on Boot (Optional)
+## 11. Auto-Start on Boot (Optional)
 
 ```bash
 # Create systemd service
