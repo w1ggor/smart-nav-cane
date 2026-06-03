@@ -16,6 +16,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 # Allow running from repo root without installing the package
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -42,10 +43,16 @@ logging.basicConfig(
 logger = logging.getLogger("test_sensors")
 
 
-def test_webcam(device_index: int = 0, n_frames: int = 30, show: bool = False) -> bool:
-    logger.info("=== Webcam Test (device=%d, frames=%d) ===", device_index, n_frames)
+def test_webcam(
+    device_name: Optional[str] = None,
+    device_index: int = 1,
+    n_frames: int = 30,
+    show: bool = False,
+) -> bool:
+    label = device_name or f"index={device_index}"
+    logger.info("=== Webcam Test (device=%s, frames=%d) ===", label, n_frames)
     try:
-        with WebcamSensor(device_index=device_index) as cam:
+        with WebcamSensor(device_name=device_name, device_index=device_index) as cam:
             times = []
             for i in range(n_frames):
                 t0 = time.monotonic()
@@ -109,11 +116,15 @@ def test_tof(mock: bool = False, n_frames: int = 20) -> bool:
 
 def main() -> None:
     cfg = _load_config()
-    default_webcam_index = cfg.get("webcam", {}).get("device_index", 1)
+    wcam_cfg = cfg.get("webcam", {})
+    default_device_name = wcam_cfg.get("device_name", "C270 HD WEBCAM")
+    default_device_index = wcam_cfg.get("device_index", 1)
 
     parser = argparse.ArgumentParser(description="Validate webcam and ToF sensors")
-    parser.add_argument("--webcam-index", type=int, default=default_webcam_index,
-                        help=f"Webcam device index (default from config: {default_webcam_index})")
+    parser.add_argument("--webcam-name", type=str, default=default_device_name,
+                        help="V4L2 device name substring for auto-detection")
+    parser.add_argument("--webcam-index", type=int, default=default_device_index,
+                        help="Fallback device index if auto-detection fails")
     parser.add_argument("--tof-mock", action="store_true", help="Run ToF in mock mode")
     parser.add_argument("--show", action="store_true", help="Show webcam frames in a window")
     parser.add_argument("--skip-webcam", action="store_true")
@@ -123,7 +134,11 @@ def main() -> None:
     results: dict[str, bool] = {}
 
     if not args.skip_webcam:
-        results["webcam"] = test_webcam(device_index=args.webcam_index, show=args.show)
+        results["webcam"] = test_webcam(
+            device_name=args.webcam_name,
+            device_index=args.webcam_index,
+            show=args.show,
+        )
 
     if not args.skip_tof:
         results["tof"] = test_tof(mock=args.tof_mock)

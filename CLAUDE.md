@@ -233,8 +233,8 @@ pactl set-default-sink bluez_sink.<MAC>
 
 ## Lessons Learned
 
-### USB Webcam is NOT /dev/video0 on RPi with CSI camera attached
-When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device, not the USB webcam. The C270 USB webcam lands at `/dev/video1`. Always run `v4l2-ctl --list-devices` first and set `webcam.device_index` in `config/default.yaml` accordingly. Default is now `1` for this hardware setup.
+### USB Webcam is NOT /dev/video0 on RPi with CSI camera attached — and the index is not stable
+When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device. The USB webcam index is not fixed across reboots. Fix: `WebcamSensor` now auto-detects the correct `/dev/videoX` index at `open()` time by parsing `v4l2-ctl --list-devices` and matching by device name (e.g. "C270 HD WEBCAM"). Falls back to `device_index` from config if detection fails. Set `webcam.device_name` in `config/default.yaml`.
 
 ### Arducam SDK: start() takes FrameType, not DeviceType — and FrameType.DEPTH is the correct value
 `camera.start()` requires a `FrameType` argument, not `DeviceType`. In the installed SDK, `DeviceType` is actually a frame-resolution enum (`HQVGA`, `VGA`) with no relation to depth mode. The correct call is `camera.start(FrameType.DEPTH)`. The module now imports `ArducamDepthCamera as ac` (matching official examples) and calls `cam.start(ac.FrameType.DEPTH)`.

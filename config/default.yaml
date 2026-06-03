@@ -1,7 +1,8 @@
 webcam:
-  # On RPi with Arducam ToF on CSI: /dev/video0 = CSI unicam, /dev/video1 = USB webcam.
-  # Run: v4l2-ctl --list-devices  to confirm the correct index for your setup.
-  device_index: 1
+  # Auto-detection: on Linux, 'device_name' is matched against 'v4l2-ctl --list-devices'
+  # output (case-insensitive substring). Falls back to 'device_index' if not found.
+  device_name: "C270 HD WEBCAM"
+  device_index: 1  # fallback only
   width: 640
   height: 480
   fps: 30

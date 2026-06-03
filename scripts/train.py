@@ -134,7 +134,8 @@ def main() -> None:
     envs_dir = cfg["data"]["environments_dir"]
 
     webcam = WebcamSensor(
-        device_index=args.webcam_index,
+        device_name=cfg["webcam"].get("device_name"),
+        device_index=cfg["webcam"]["device_index"],
         width=cfg["webcam"]["width"],
         height=cfg["webcam"]["height"],
         fps=cfg["webcam"]["fps"],
