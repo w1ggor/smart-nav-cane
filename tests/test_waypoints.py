@@ -143,7 +143,7 @@ def test_tof_depth_grid():
     from nav_assistant.sensors.tof import ToFFrame
     import time
     depth = np.ones((180, 240), dtype=np.float32) * 2.5
-    frame = ToFFrame(depth=depth, amplitude=np.zeros_like(depth), timestamp=time.monotonic())
+    frame = ToFFrame(depth=depth, confidence=np.zeros_like(depth), timestamp=time.monotonic())
     grid = frame.depth_grid(rows=3, cols=3)
     assert grid.shape == (9,)
     assert np.allclose(grid, 2.5)
@@ -154,6 +154,6 @@ def test_tof_forward_min_depth():
     import time
     depth = np.ones((180, 240), dtype=np.float32) * 3.0
     depth[70:110, 80:160] = 0.8  # obstacle in central zone
-    frame = ToFFrame(depth=depth, amplitude=np.zeros_like(depth), timestamp=time.monotonic())
+    frame = ToFFrame(depth=depth, confidence=np.zeros_like(depth), timestamp=time.monotonic())
     min_d = frame.forward_min_depth(zone_fraction=0.33)
     assert min_d == pytest.approx(0.8, abs=0.01)

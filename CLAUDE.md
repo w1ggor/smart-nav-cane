@@ -237,7 +237,10 @@ pactl set-default-sink bluez_sink.<MAC>
 When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device, not the USB webcam. The C270 USB webcam lands at `/dev/video1`. Always run `v4l2-ctl --list-devices` first and set `webcam.device_index` in `config/default.yaml` accordingly. Default is now `1` for this hardware setup.
 
 ### Arducam SDK: start() takes FrameType, not DeviceType — and FrameType.DEPTH is the correct value
-`camera.start()` requires a `FrameType` argument, not `DeviceType`. In the installed SDK, `DeviceType` is actually a frame-resolution enum (`HQVGA`, `VGA`) with no relation to depth mode. The correct call is `camera.start(FrameType.DEPTH)`. The module now imports `FrameType` and uses `_resolve_frame_type()` which tries `DEPTH`, `Depth`, `HQVGA`, `VGA` in order.
+`camera.start()` requires a `FrameType` argument, not `DeviceType`. In the installed SDK, `DeviceType` is actually a frame-resolution enum (`HQVGA`, `VGA`) with no relation to depth mode. The correct call is `camera.start(FrameType.DEPTH)`. The module now imports `ArducamDepthCamera as ac` (matching official examples) and calls `cam.start(ac.FrameType.DEPTH)`.
+
+### Arducam SDK frame data is accessed via properties, not methods
+`requestFrame()` returns an `ac.DepthData` object. Data is accessed via **properties**: `frame.depth_data` and `frame.confidence_data` — NOT via `getDepthData()` / `getAmplitudeData()` methods (which do not exist). Always check `isinstance(frame, ac.DepthData)` before accessing. The second channel is `confidence_data` (signal strength 0–255), not "amplitude".
 
 ### cv2.CAP_V4L2 hint makes CSI unicam appear to open — use default backend
 Explicitly passing `cv2.CAP_V4L2` to `VideoCapture` causes the CSI unicam device (`/dev/video0`) to report `isOpened() == True` while returning no frames. Using `cv2.VideoCapture(index)` with no backend hint lets OpenCV auto-select V4L2, which only opens devices that actually stream. Removed the explicit backend hint from `WebcamSensor.open()`.
