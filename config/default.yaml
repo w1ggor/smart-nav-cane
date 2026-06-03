@@ -10,7 +10,10 @@ webcam:
 tof:
   # Connection type: "csi" or "usb"
   connection: csi
-  device_index: 0
+  # Auto-detection: matched against 'v4l2-ctl --list-devices' (case-insensitive).
+  # The unicam platform device is always the CSI port on RPi.
+  device_name: "unicam"
+  device_index: 0  # fallback only
   # Depth values beyond this (meters) are treated as "clear"
   max_range: 4.0
   # Timeout waiting for a frame (milliseconds)

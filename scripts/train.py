@@ -142,6 +142,8 @@ def main() -> None:
     )
     tof = ToFSensor(
         connection=cfg["tof"]["connection"],
+        device_name=cfg["tof"].get("device_name", "unicam"),
+        device_index=cfg["tof"]["device_index"],
         frame_timeout_ms=cfg["tof"]["frame_timeout_ms"],
         mock_mode=args.tof_mock,
     )

@@ -28,6 +28,7 @@ from typing import Optional
 import numpy as np
 
 from .base import ISensor, SensorError, SensorFrame
+from .utils import find_v4l2_device_index
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,10 @@ class ToFSensor(ISensor):
 
     Args:
         connection: "csi" (default) or "usb".
-        device_index: Device index (usually 0).
+        device_name: V4L2 device name substring for auto-detection, e.g. "unicam".
+            On Linux, 'v4l2-ctl --list-devices' is parsed to find the correct index.
+            Falls back to device_index if detection fails.
+        device_index: Fallback device index (usually 0 for CSI).
         frame_timeout_ms: Milliseconds to wait for a frame.
         max_range_mm: Maximum depth range in mm (2000 or 4000).
         mock_mode: Force mock mode even if SDK is available (for testing).
@@ -101,12 +105,14 @@ class ToFSensor(ISensor):
     def __init__(
         self,
         connection: str = "csi",
+        device_name: Optional[str] = "unicam",
         device_index: int = 0,
         frame_timeout_ms: int = 2000,
         max_range_mm: int = 4000,
         mock_mode: bool = False,
     ) -> None:
         self._connection_str = connection.lower()
+        self._device_name = device_name
         self._device_index = device_index
         self._frame_timeout = frame_timeout_ms
         self._max_range_mm = max_range_mm
@@ -128,13 +134,14 @@ class ToFSensor(ISensor):
             return
 
         conn = ac.Connection.CSI if self._connection_str == "csi" else ac.Connection.USB
+        index = self._resolve_index()
 
         self._cam = ac.ArducamCamera()
-        ret = self._cam.open(conn, self._device_index)
+        ret = self._cam.open(conn, index)
         if ret != 0:
             raise SensorError(
                 f"Failed to open Arducam ToF camera "
-                f"(connection={self._connection_str}, index={self._device_index}). "
+                f"(connection={self._connection_str}, index={index}). "
                 f"Error code: {ret}"
             )
 
@@ -214,3 +221,22 @@ class ToFSensor(ISensor):
     def read_tof(self) -> ToFFrame:
         """Convenience method returning a ToFFrame directly."""
         return self.read().data
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _resolve_index(self) -> int:
+        """Return the V4L2 device index, auto-detecting via v4l2-ctl if possible."""
+        if self._device_name:
+            detected = find_v4l2_device_index(self._device_name)
+            if detected is not None:
+                logger.info(
+                    "Auto-detected '%s' at /dev/video%d", self._device_name, detected
+                )
+                return detected
+            logger.warning(
+                "Could not find '%s' via v4l2-ctl — falling back to index %d",
+                self._device_name, self._device_index,
+            )
+        return self._device_index
