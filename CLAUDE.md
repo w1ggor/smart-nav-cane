@@ -138,12 +138,12 @@ class WaypointEdge:
 - [ ] Sensor test scripts running on RPi
 - [ ] Confirm ToF SDK installation on RPi
 
-### Phase 2 — Environment Learning
-- [ ] Training mode recorder
-- [ ] ORB descriptor extraction
-- [ ] Waypoint capture UI (keyboard-driven CLI)
-- [ ] Environment persistence to SQLite + .npy
-- [ ] Edge/connection recording between waypoints
+### Phase 2 — Environment Learning ✅ COMPLETE
+- [x] Training mode recorder
+- [x] ORB descriptor extraction
+- [x] Waypoint capture UI (keyboard-driven CLI)
+- [x] Environment persistence to SQLite + .npy
+- [x] Edge/connection recording between waypoints
 
 ### Phase 3 — Localization & Navigation
 - [ ] ORB-based place recognizer (match frame → waypoint)
@@ -169,9 +169,9 @@ class WaypointEdge:
 
 ## Current Status
 
-**Phase:** 1 — Sensor Integration  
-**Last Updated:** 2026-05-30  
-**Working On:** Initial project scaffolding and sensor abstractions
+**Phase:** 3 — Localization & Navigation  
+**Last Updated:** 2026-06-07  
+**Working On:** Place recognition testing and navigation loop
 
 ---
 
@@ -179,12 +179,14 @@ class WaypointEdge:
 
 - Project structure initialized
 - Abstract sensor interface defined
-- WebcamSensor implementation (OpenCV)
-- ToFSensor implementation (Arducam SDK)
+- WebcamSensor implementation (OpenCV) with V4L2 device name auto-detection
+- ToFSensor implementation (Arducam SDK) with V4L2 device name auto-detection
 - Waypoint and WaypointEdge data models
 - EnvironmentMap SQLite storage
 - Configuration system (YAML)
-- Sensor validation scripts
+- Sensor validation scripts (test_sensors.py)
+- Training mode CLI (train.py) — waypoint capture + edge definition
+- First real environment captured: "lab_test" (door, office, 1 route)
 
 ---
 
