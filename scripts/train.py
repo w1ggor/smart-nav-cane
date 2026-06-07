@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-Training mode — Phase 2.
+Training mode — capture named locations for the awareness system.
 
-Interactive CLI to walk through an environment, capture waypoints, and
-define connections between them.
+Walk to each location you want the system to recognise, point the webcam
+at a representative view, and run 'capture <label>'. The system stores
+ORB visual descriptors and a ToF depth profile for each location.
 
 Usage:
     python scripts/train.py --env my_home
     python scripts/train.py --env my_home --tof-mock
 
-Commands during training session:
-    capture <label>              Capture current camera view as a new waypoint
-    edge <from> <to> <steps> <hint> "<instruction>"
-                                 Connect two waypoints
-    list                         List captured waypoints
-    delete <label>               Delete a waypoint
-    quit                         Save and exit
+Commands:
+    capture <label>    Capture current view as a named location
+                       e.g. capture kitchen, capture hallway, capture office
+    list               List all captured locations
+    delete <label>     Delete a location
+    quit               Save and exit
+
+Note: 'edge' connections between locations are supported for future
+navigation features but are not required for the awareness system.
 """
 
 from __future__ import annotations

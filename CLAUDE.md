@@ -1,4 +1,4 @@
-# CLAUDE.md — Smart Navigation Assistant for Visually Impaired Users
+# CLAUDE.md — Smart Cane Environmental Awareness System
 
 > **This file is the project's living memory and source of truth.**
 > Update it whenever code changes, decisions are made, or lessons are learned.
@@ -7,7 +7,12 @@
 
 ## Project Overview
 
-An IoT + Edge AI system running on a Raspberry Pi 4 that acts as a smart navigation assistant for visually impaired users. The device resembles a smart cane: it learns an indoor environment during a training phase, then guides the user through previously learned routes using audio cues and real-time obstacle detection.
+An IoT + Edge AI environmental awareness assistant running entirely on a Raspberry Pi 4. The device is worn or carried like a smart cane and provides two core functions:
+
+1. **Obstacle detection** — the ToF camera continuously measures forward depth; anything within a configurable threshold triggers an audio alert.
+2. **Location recognition** — the webcam matches the current scene against a database of trained locations using ORB feature descriptors; when the user enters a recognized space they are told where they are.
+
+The system runs fully offline. No cloud services, no internet required.
 
 **University:** IoT Term Project  
 **Platform:** Raspberry Pi 4 Model B  
@@ -21,44 +26,58 @@ An IoT + Edge AI system running on a Raspberry Pi 4 that acts as a smart navigat
 | Component | Model | Interface | Role |
 |-----------|-------|-----------|------|
 | Compute | Raspberry Pi 4 Model B (4GB+) | — | Central processing unit |
-| Depth Camera | Arducam ToF Camera B0410 | CSI / USB | Real-time depth measurement, obstacle detection |
-| RGB Camera | USB Webcam (generic) | USB (UVC) | Visual place recognition |
-| Audio Output | Bluetooth Headphones | Bluetooth (A2DP) | Voice guidance, obstacle alerts |
+| Depth Camera | Arducam ToF Camera B0410 | CSI | Real-time obstacle depth measurement |
+| RGB Camera | USB Webcam (C270 HD WEBCAM) | USB (UVC) | Location/room recognition |
+| Audio Output | Bluetooth Headphones | Bluetooth (A2DP) | Spoken alerts and announcements |
 
 ### Optional Future Hardware (not dependencies)
-- IMU (MPU-6050): Step counting and orientation for dead-reckoning between waypoints
-- Ultrasonic sensors (HC-SR04): Redundant close-range obstacle detection
+- IMU (MPU-6050): Step counting for future navigation features
+- Ultrasonic sensors (HC-SR04): Redundant close-range detection
 - GPS module: Outdoor extension
 
 ---
 
-## Architecture Decisions
+## Architecture
 
-### Why No SLAM / ROS
-Full SLAM (ORB-SLAM3, OpenVSLAM) and ROS add significant complexity, require careful calibration, and are overkill for a constrained indoor environment with a fixed set of learned routes. The chosen approach favors a **working prototype over academic complexity**.
+### Scope Decision — Awareness over Navigation
+Full indoor navigation (SLAM, route planning, turn-by-turn guidance) is documented as future work. The first version focuses on **environmental awareness**: telling the user what is around them rather than guiding them to a destination. This is more achievable, more robust, and still genuinely useful for visually impaired users.
 
-### Core Design: Waypoint Graph + Visual Place Recognition
-- **Map Representation**: A directed graph where nodes are *waypoints* (named, visually identifiable locations) and edges are traversable paths with estimated step counts/distances.
-- **Localization**: ORB feature descriptors extracted from the webcam frame are matched against stored waypoint descriptors. The waypoint with the best match score above a confidence threshold is the current location.
-- **Navigation**: Dijkstra's algorithm on the waypoint graph produces a sequence of waypoints. Audio instructions are issued at each transition.
-- **Obstacle Detection**: The ToF camera produces a depth frame (up to 4m). A configurable depth threshold in the forward zone triggers an immediate audio alert.
+### Core Design: Awareness Loop
+Two parallel concerns run in a single loop at ~2 Hz:
 
-### Why ORB (not deep learning)
-- Runs efficiently on RPi CPU (no GPU)
-- No training data required
-- Deterministic and debuggable
-- OpenCV built-in — no extra dependencies
-- Sufficient for indoor place recognition with controlled lighting
+```
+ToF frame  → ObstacleDetector → audio alert if obstacle < threshold
+Webcam frame → PlaceRecognizer → audio announce if location changes
+```
 
-### Why SQLite + .npy files
-- Zero-dependency database that survives reboots
-- `.npy` files store ORB descriptor matrices efficiently (numpy native format)
-- No cloud required, fully offline
+The loop is intentionally simple — no state machine, no route planning, no graph traversal.
+
+### Location Recognition — ORB Feature Matching
+- Webcam frames are matched against stored location descriptors using ORB (OpenCV built-in)
+- Each trained location stores an ORB descriptor matrix (.npy) and a ToF depth profile
+- FLANN/BFMatcher with Lowe's ratio test selects good matches
+- A confidence score (good_matches / n_features) gates announcements
+- No deep learning, no GPU, no cloud — runs on RPi CPU at ~5 FPS for recognition
+
+### Obstacle Detection — Depth Thresholding
+- The ToF camera produces a 240×180 depth frame at ~10 FPS
+- The central zone (configurable fraction of frame) is checked for minimum depth
+- If min depth < alert_threshold_m → audio alert with distance
+- A cooldown prevents repeated alerts for the same obstacle
 
 ### Audio Strategy
-- Primary: `pyttsx3` (offline TTS engine) for spoken navigation instructions
-- Alert: `pygame.mixer` for immediate non-blocking obstacle warning tones
-- Bluetooth: Paired at OS level; Python sees it as default audio device
+- Linux/RPi: `espeak-ng` called via subprocess (most reliable, no driver bugs)
+- Fallback: `pyttsx3` (macOS/Windows only)
+- Location announcements: non-blocking (background thread)
+- Obstacle alerts: blocking (~0.3s) to guarantee immediate delivery
+
+### Why Not SLAM / ROS / Navigation
+Full indoor navigation requires:
+- Accurate step counting or odometry (no IMU available)
+- Map building and localization simultaneously (computationally expensive)
+- Safe real-time path planning with obstacle avoidance
+
+These are left as future work. The awareness system provides real value without them.
 
 ---
 
@@ -67,134 +86,127 @@ Full SLAM (ORB-SLAM3, OpenVSLAM) and ROS add significant complexity, require car
 ```
 src/nav_assistant/
 ├── sensors/
-│   ├── base.py           # Abstract sensor interface (ISensor)
-│   ├── webcam.py         # USB webcam wrapper (OpenCV)
-│   └── tof.py            # Arducam ToF B0410 wrapper
+│   ├── base.py               # Abstract ISensor interface
+│   ├── webcam.py             # USB webcam (OpenCV, V4L2 auto-detect)
+│   ├── tof.py                # Arducam ToF B0410 (SDK, V4L2 auto-detect)
+│   └── utils.py              # V4L2 device name detection shared utility
 ├── mapping/
-│   ├── waypoint.py       # Waypoint dataclass + serialization
-│   ├── environment.py    # Environment map: SQLite graph store
-│   └── recorder.py       # Training phase: capture + store waypoints
+│   ├── waypoint.py           # Location dataclass + serialization
+│   ├── environment.py        # SQLite-backed location store
+│   └── recorder.py           # Training: capture + store locations
 ├── localization/
-│   └── place_recognizer.py  # ORB matching against waypoint database
-├── navigation/
-│   ├── route_graph.py    # networkx graph, Dijkstra routing
-│   └── navigator.py      # Navigation state machine
+│   └── place_recognizer.py   # ORB matching → current location
+├── obstacle/
+│   └── detector.py           # ToF depth threshold → ObstacleAlert
 ├── audio/
-│   └── guidance.py       # TTS + audio alert interface
-└── obstacle/
-    └── detector.py       # Depth-frame threshold obstacle detection
+│   └── guidance.py           # TTS (espeak-ng) + obstacle beep
+└── awareness.py              # AwarenessSystem: main loop coordinator
+
+scripts/
+├── train.py                  # CLI: capture and store named locations
+├── awareness.py              # Entry point: run the awareness system
+└── test_sensors.py           # Hardware validation
+
+Future work (stubs present, not active):
+└── navigation/
+    ├── route_graph.py        # Dijkstra route planning (future)
+    └── navigator.py          # Navigation state machine (future)
 ```
 
-### Data Flow (Navigation Mode)
+### Data Flow
 ```
-WebcamSensor → frame → PlaceRecognizer → current_waypoint
-ToFSensor    → depth → ObstacleDetector → alert if needed
-current_waypoint + destination → Navigator → next_instruction
-next_instruction → AudioGuidance → spoken output
-```
-
-### Data Flow (Training Mode)
-```
-WebcamSensor → frame → ORB descriptors  ┐
-ToFSensor    → depth → depth profile    ├→ Waypoint → EnvironmentMap (SQLite)
-user input   → label + connections      ┘
+WebcamSensor → frame → PlaceRecognizer → location label → AudioGuidance
+ToFSensor    → depth → ObstacleDetector → alert         → AudioGuidance
 ```
 
 ---
 
-## Waypoint Data Model
+## Location Data Model
 
 ```python
 @dataclass
-class Waypoint:
-    id: str                    # UUID
-    label: str                 # Human name, e.g. "kitchen_door"
-    descriptor_path: str       # Path to .npy file with ORB descriptors
-    depth_profile: list[float] # 9-sector depth grid (3x3) from ToF
-    created_at: str            # ISO timestamp
-    notes: str                 # Optional human notes
-
-@dataclass
-class WaypointEdge:
-    from_id: str
-    to_id: str
-    steps: int                 # Estimated steps between waypoints
-    direction_hint: str        # "forward", "turn_left", "turn_right"
-    audio_instruction: str     # e.g. "Walk forward 10 steps, then turn left"
+class Waypoint:          # represents a named location / room
+    id: str              # UUID
+    label: str           # Human name: "hallway", "kitchen", "office"
+    descriptor_path: str # Path to .npy ORB descriptor matrix
+    depth_profile: list[float]  # 9-cell depth grid (3×3) from ToF
+    created_at: str
+    notes: str
 ```
+
+Edges between locations are stored in SQLite but are **not used** in the current version. They are preserved for future navigation features.
 
 ---
 
 ## Development Roadmap
 
-### Phase 1 — Sensor Integration & Data Acquisition ✅ IN PROGRESS
-- [x] Repository structure
-- [x] CLAUDE.md initialized
-- [x] Abstract sensor interface (`ISensor`)
-- [x] Webcam module (`WebcamSensor`)
-- [x] ToF camera module (`ToFSensor`)
-- [x] Waypoint data model
-- [x] Environment storage (SQLite)
-- [ ] Sensor test scripts running on RPi
-- [ ] Confirm ToF SDK installation on RPi
+### Phase 1 — Sensor Integration ✅ COMPLETE
+- [x] Abstract sensor interface
+- [x] WebcamSensor with V4L2 auto-detection by device name
+- [x] ToFSensor with Arducam SDK + V4L2 auto-detection
+- [x] Sensor validation script
 
-### Phase 2 — Environment Learning ✅ COMPLETE
-- [x] Training mode recorder
+### Phase 2 — Location Training ✅ COMPLETE
+- [x] Waypoint/location data model
+- [x] SQLite + .npy environment storage
 - [x] ORB descriptor extraction
-- [x] Waypoint capture UI (keyboard-driven CLI)
-- [x] Environment persistence to SQLite + .npy
-- [x] Edge/connection recording between waypoints
+- [x] Training CLI (train.py)
+- [x] First environment captured on hardware (lab_test: door, office)
 
-### Phase 3 — Localization & Navigation
-- [ ] ORB-based place recognizer (match frame → waypoint)
-- [ ] Route graph construction from stored environment
-- [ ] Dijkstra navigation path planning
-- [ ] Navigation state machine (idle → navigating → arrived)
+### Phase 3 — Awareness Loop ← CURRENT
+- [x] ObstacleDetector (ToF depth threshold)
+- [x] PlaceRecognizer (ORB matching)
+- [x] AudioGuidance (espeak-ng)
+- [ ] AwarenessSystem coordinator (main loop)
+- [ ] awareness.py entry point script
+- [ ] End-to-end test on hardware
 
-### Phase 4 — Audio Guidance & Obstacle Avoidance
-- [ ] pyttsx3 TTS integration
-- [ ] Bluetooth audio device selection
-- [ ] Real-time obstacle detection (ToF depth threshold)
-- [ ] Audio alert system (non-blocking)
-- [ ] Navigation instruction speech synthesis
+### Phase 4 — Tuning & Polish
+- [ ] Confidence threshold tuning (min matches for location announcement)
+- [ ] Obstacle alert threshold tuning (distance, cooldown)
+- [ ] Location announcement cooldown (suppress repeat announcements)
+- [ ] CPU profiling on RPi, frame rate optimization
+- [ ] Graceful startup / shutdown (announcements on start/stop)
 
-### Phase 5 — Optimization & Polish
-- [ ] RPi CPU profiling and bottleneck resolution
-- [ ] Frame rate tuning for real-time performance
-- [ ] Confidence threshold tuning for place recognition
-- [ ] Optional: MobileNetV3 feature extractor as ORB upgrade
-- [ ] Optional: Dead-reckoning with IMU between waypoints
+### Future Work (not in scope for v1)
+- Route planning and turn-by-turn navigation
+- Waypoint edge recording and graph traversal
+- Dead-reckoning with IMU between locations
+- SLAM integration for unknown environments
+- MobileNetV3 or similar for more robust location recognition
+- Multi-environment support with automatic environment selection
 
 ---
 
 ## Current Status
 
-**Phase:** 3 — Localization & Navigation  
+**Phase:** 3 — Awareness Loop  
 **Last Updated:** 2026-06-07  
-**Working On:** Place recognition testing and navigation loop
+**Working On:** AwarenessSystem coordinator + awareness.py entry point
 
 ---
 
 ## Completed Features
 
 - Project structure initialized
-- Abstract sensor interface defined
-- WebcamSensor implementation (OpenCV) with V4L2 device name auto-detection
-- ToFSensor implementation (Arducam SDK) with V4L2 device name auto-detection
-- Waypoint and WaypointEdge data models
-- EnvironmentMap SQLite storage
-- Configuration system (YAML)
-- Sensor validation scripts (test_sensors.py)
-- Training mode CLI (train.py) — waypoint capture + edge definition
-- First real environment captured: "lab_test" (door, office, 1 route)
+- WebcamSensor with V4L2 device name auto-detection (no hardcoded indices)
+- ToFSensor with Arducam SDK + V4L2 device name auto-detection
+- Waypoint/location data model (SQLite + .npy)
+- EnvironmentMap persistent storage
+- Training CLI — capture named locations from webcam + ToF
+- PlaceRecognizer — ORB feature matching against stored locations
+- ObstacleDetector — ToF depth threshold with cooldown
+- AudioGuidance — espeak-ng subprocess on Linux, pyttsx3 fallback
+- First real environment captured on hardware (lab_test)
 
 ---
 
 ## Pending Tasks
 
-- Deploy and test sensors on physical Raspberry Pi
-- Confirm Arducam ToF SDK Python bindings work on RPi OS
-- Verify Bluetooth audio device pairing and pyttsx3 output
+- Implement AwarenessSystem coordinator class
+- Implement awareness.py entry point
+- End-to-end hardware test of full awareness loop
+- Tune confidence and obstacle thresholds for real environment
 
 ---
 
@@ -202,33 +214,30 @@ class WaypointEdge:
 
 ### Arducam ToF B0410 SDK
 - Install from: https://github.com/ArduCAM/Arducam_tof_camera
-- Python package: `ArducamDepthCamera`
-- Connection type: CSI (preferred) or USB
-- Output: 240×180 depth frame (float32, meters) + amplitude frame
-- Max range: ~4m indoors
-- Frame rate: ~10 FPS at full resolution
+- Import as: `import ArducamDepthCamera as ac`
+- Open: `cam.open(ac.Connection.CSI, index)` — index from V4L2 unicam detection
+- Start: `cam.start(ac.FrameType.DEPTH)`
+- Frame data: `frame.depth_data` (property, not method), `frame.confidence_data`
+- Shutdown: `cam.stop()` then `cam.close()`
 
 ### ORB Matching Parameters
-- `nfeatures=500` balances descriptor richness vs. speed
-- FLANN with LSH index for binary descriptors
-- Match ratio test: 0.75 (Lowe's ratio)
-- Minimum good matches for confident localization: 15
+- `nfeatures=500` balances richness vs. speed
+- BFMatcher with `NORM_HAMMING`, Lowe's ratio test at 0.75
+- Minimum 15 good matches for a confident location recognition
+- Confidence = min(1.0, good_matches / 250) — tune threshold in config
 
 ### RPi Performance Targets
 - ToF read + obstacle check: < 50ms
-- ORB extraction + matching: < 200ms per frame
-- Total navigation loop: < 500ms (2 Hz is acceptable)
+- ORB extraction + matching: < 300ms per frame
+- Awareness loop cycle: ~500ms (2 Hz)
+- Location recognition runs every 3rd cycle to reduce CPU load
 
 ### Bluetooth Audio Setup (RPi)
 ```bash
 bluetoothctl
-  power on
-  scan on
-  pair <MAC>
-  connect <MAC>
-  trust <MAC>
-# Set as default in /etc/pulse/default.pa or via pactl
-pactl set-default-sink bluez_sink.<MAC>
+  power on; scan on; pair <MAC>; connect <MAC>; trust <MAC>
+pactl set-default-sink bluez_sink.<MAC>.a2dp_sink
+espeak-ng "Hello world"   # test
 ```
 
 ---
@@ -253,8 +262,11 @@ USB webcams on Linux (V4L2) often return black/empty frames for the first few re
 ### pyttsx3 broken on Python 3.13 + espeak-ng (RPi OS Bookworm)
 `pyttsx3`'s espeak driver hardcodes the voice name `gmw/en` which doesn't exist in `espeak-ng`. This raises `ValueError: SetVoiceByName failed` on init. **Fix:** call `espeak-ng` directly via `subprocess` on Linux — no pyttsx3 needed. pyttsx3 is kept as a fallback for macOS/Windows only. The `AudioGuidance` class auto-detects the backend at import time using `shutil.which("espeak-ng")`.
 
+### ToF cam.open() index maps to V4L2 device — must match unicam, not a hardcoded 0
+The Arducam SDK maps `cam.open(Connection.CSI, index)` to the V4L2 device at `/dev/video{index}`. If the unicam isn't at index 0 (e.g. USB webcam boots first), the SDK fails with "I2C bus name doesn't match any bus present!". Fix: same V4L2 auto-detection as the webcam, searching for "unicam" in `v4l2-ctl --list-devices`.
+
 ---
 
-## Deployment Instructions
+## Deployment
 
 See [docs/deployment.md](docs/deployment.md) for full Raspberry Pi setup guide.
