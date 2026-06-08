@@ -194,11 +194,12 @@ USB Webcam  ──► ORB Feature Matching ──► Confidence Score ───�
 ---
 
 <!-- ─── SLIDE 4: Assembled Hardware Photo ─────────────── -->
-## D. Hardware — Assembled Prototype
 
-<br>
+![bg contain](../photos/hardwarePhoto.jpg)
 
-![hardware w:720px center](../photos/hardwarePhoto.jpeg)
+<div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(26,26,46,0.82);padding:6px 24px;border-radius:20px;font-size:0.78em;color:#eaeaea;white-space:nowrap;">
+  D. Hardware — Assembled Prototype
+</div>
 
 ---
 
