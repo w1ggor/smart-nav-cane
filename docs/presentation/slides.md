@@ -8,200 +8,277 @@ color: #eaeaea
 style: |
   section {
     font-family: 'Segoe UI', sans-serif;
-    padding: 50px 60px;
+    padding: 36px 48px;
+    overflow: hidden;
   }
   section.lead h1 {
     color: #e94560;
-    font-size: 2.2em;
+    font-size: 1.7em;
+    line-height: 1.25;
+  }
+  section.lead h2 {
+    color: #e94560;
+    font-size: 1.3em;
+    border: none;
+    margin-bottom: 8px;
   }
   section.lead h3 {
     color: #a0a0c0;
     font-weight: 400;
+    font-size: 0.95em;
+  }
+  section.lead p {
+    font-size: 0.9em;
+    color: #c0c0d8;
   }
   h2 {
     color: #e94560;
     border-bottom: 2px solid #e94560;
-    padding-bottom: 8px;
-    margin-bottom: 24px;
+    padding-bottom: 6px;
+    margin-bottom: 16px;
+    font-size: 1.2em;
   }
+  p { font-size: 0.85em; margin: 6px 0; }
   code {
     background: #16213e;
     color: #00d2ff;
     border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 0.85em;
+    padding: 1px 5px;
+    font-size: 0.8em;
   }
   pre {
     background: #16213e !important;
     border-left: 4px solid #e94560;
     border-radius: 6px;
-    padding: 20px !important;
+    padding: 14px 16px !important;
+    margin: 10px 0 !important;
   }
   pre code {
     background: transparent;
     color: #e2e8f0;
-    font-size: 0.78em;
+    font-size: 0.68em;
     padding: 0;
+    line-height: 1.45;
   }
-  .columns {
+  .cols {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
+    gap: 24px;
     align-items: start;
   }
-  ul li {
-    margin-bottom: 10px;
-    line-height: 1.5;
+  .cols3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+    text-align: center;
   }
-  .tag {
-    background: #e94560;
-    color: white;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 0.75em;
-    font-weight: bold;
+  .cols4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+    text-align: center;
   }
+  .card {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .card img { border-radius: 6px; margin-bottom: 6px; }
+  .card p { font-size: 0.72em; color: #a0a0c0; margin: 0; }
+  ul { margin: 6px 0; padding-left: 20px; }
+  ul li { font-size: 0.82em; margin-bottom: 6px; line-height: 1.4; }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85em;
+    font-size: 0.75em;
   }
   th {
     background: #e94560;
     color: white;
-    padding: 8px 12px;
+    padding: 6px 10px;
     text-align: left;
   }
   td {
-    padding: 8px 12px;
+    padding: 6px 10px;
     border-bottom: 1px solid #2a2a4a;
+    vertical-align: top;
   }
-  tr:nth-child(even) td {
+  tr:nth-child(even) td { background: #16213e; }
+  blockquote {
+    border-left: 3px solid #e94560;
+    padding: 8px 14px;
     background: #16213e;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.82em;
+    font-style: italic;
+    margin: 10px 0;
   }
-  footer {
-    color: #606080;
-    font-size: 0.7em;
+  .label {
+    font-size: 0.72em;
+    color: #a0a0c0;
+    margin-top: 4px;
   }
 ---
 
-<!-- Slide 1: Title -->
-# Smart Cane Environmental Awareness System
+<!-- ─── SLIDE 1: Title ─────────────────────────────────── -->
 
-### IoT Term Project — First Draft Presentation
+# AI Smart Navigation Assistant for Visually Impaired People Using Raspberry Pi
+
+## Smart Cane Environmental Awareness System
+
+### IoT Term Project · First Draft Presentation
 
 <br>
 
-**Igor Xavier**
-Raspberry Pi 4 · Arducam ToF · OpenCV · Python
+**Igor Xavier** &nbsp;·&nbsp; **Fang Jialuo**
 
 ---
 <!-- class: default -->
 
-<!-- Slide 2: Objective -->
+<!-- ─── SLIDE 2: Objective ─────────────────────────────── -->
 ## A. Main Idea & Objective
 
-**Problem:** Visually impaired users struggle to navigate indoor environments safely and independently.
+**Problem:** Visually impaired users struggle to navigate indoor environments safely and independently, especially in unfamiliar spaces.
 
-**Our solution:** A smart cane device that provides real-time environmental awareness through two mechanisms:
+<div class="cols">
 
-<br>
+<div>
 
-<div class="columns">
+**Original vision — Visual SLAM**
+Full indoor mapping using ORB-SLAM3 and ROS, building a 3D map in real time and navigating autonomously.
 
-**🔴 Obstacle Detection**
-The ToF depth camera continuously monitors the forward path and warns the user about nearby obstacles through their headphones.
-
-**🔵 Location Recognition**
-The webcam recognizes previously trained rooms or locations and tells the user where they currently are.
+➡ Deprioritized: requires IMU, significant compute, and complex calibration beyond current scope.
 
 </div>
 
-<br>
+<div>
 
-> *"Obstacle detected 0.8 metres ahead."*  &nbsp;&nbsp; *"You are in the office."*
+**Revised scope — Awareness System**
+Two focused functions that are achievable, reliable, and genuinely useful:
+
+- 🔴 **Obstacle detection** via ToF depth camera
+- 🔵 **Location recognition** via webcam + ORB features
+- 🔊 **Audio feedback** via Bluetooth headphones
+
+</div>
+</div>
+
+> *"Obstacle 0.8m ahead."* &nbsp;&nbsp; *"You are in the office."*
 
 ---
 
-<!-- Slide 3: System Design -->
+<!-- ─── SLIDE 3: System Design ─────────────────────────── -->
 ## B. System Design & Methodology
 
-**Core loop running at 2 Hz — no cloud, fully offline:**
+**Awareness loop at 2 Hz — fully offline, no cloud:**
 
 ```
-┌─────────────┐    depth frame    ┌──────────────────┐
-│ Arducam ToF │ ────────────────► │ Obstacle Detector│──► Audio Alert
-└─────────────┘                   └──────────────────┘
-                                                         ┌───────────────┐
-┌─────────────┐    video frame    ┌──────────────────┐   │ Bluetooth     │
-│ USB Webcam  │ ────────────────► │ Place Recognizer │──► Headphones    │
-└─────────────┘                   └──────────────────┘   └───────────────┘
+Arducam ToF ──► Obstacle Detector ──────────────────────────────► Audio Alert
+                (depth threshold,                                  (espeak-ng)
+                 central zone only)
+
+USB Webcam  ──► ORB Feature Matching ──► Confidence Score ──────► Announce
+                (vs. stored descriptors    > threshold?             location
+                 per trained location)
 ```
+
+| | What | How | When |
+|---|---|---|---|
+| Obstacle | Depth < threshold in central zone | ToF frame | Every cycle |
+| Location | ORB descriptors matched vs. training | Webcam frame | Every 3rd cycle |
+| Audio | espeak-ng subprocess | Bluetooth headphones | On event |
+
+---
+
+<!-- ─── SLIDE 4: Assembled Hardware Photo ─────────────── -->
+## D. Hardware — Assembled Prototype
 
 <br>
 
-| Concern | Approach | Frequency |
-|---|---|---|
-| Obstacle detection | Depth threshold on ToF frame | Every cycle |
-| Location recognition | ORB feature matching | Every 3 cycles (~1.5s) |
-| Audio output | espeak-ng via subprocess | On event |
+![hardware w:720px center](../photos/hardwarePhoto.jpeg)
 
 ---
 
-<!-- Slide 4: Hardware -->
+<!-- ─── SLIDE 5: Hardware Components ──────────────────── -->
 ## D. Hardware Components
 
-<div class="columns">
+<div class="cols4">
 
-**Processing & Sensing**
+<div class="card">
+  <img src="../photos/raspberry.jfif" width="140" />
+  <p><strong>Raspberry Pi 4</strong><br>Central compute<br>4GB RAM</p>
+</div>
 
-| Component | Role |
-|---|---|
-| Raspberry Pi 4 (4GB) | Central compute |
-| Arducam ToF B0410 | Depth camera (CSI) |
-| USB Webcam C270 | Room recognition |
-| Bluetooth Headphones | Audio output |
+<div class="card">
+  <img src="../photos/arducamTOF.jpg" width="140" />
+  <p><strong>Arducam ToF B0410</strong><br>Depth sensing<br>CSI · up to 4m</p>
+</div>
 
-**Why this hardware?**
+<div class="card">
+  <img src="../photos/logitechC270.jfif" width="140" />
+  <p><strong>Logitech C270</strong><br>Location recognition<br>USB · 720p</p>
+</div>
 
-- Runs **fully offline** — no GPU needed
-- ToF gives **precise depth** up to 4m
-- ORB matching runs on **CPU only**
-- Bluetooth audio = **wearable cane** form factor
+<div class="card">
+  <img src="../photos/bluetoothEarphone.webp" width="140" />
+  <p><strong>BT Headphones</strong><br>Audio output<br>A2DP · offline TTS</p>
+</div>
 
 </div>
 
+<br>
+
+| Component | Key Spec | Role |
+|---|---|---|
+| Raspberry Pi 4 (4GB) | ARM Cortex-A72 · 4GB LPDDR4 | Runs all processing locally |
+| Arducam ToF B0410 | 240×180 · 10 FPS · 4m range | Forward obstacle depth |
+| Logitech C270 | 640×480 · 30 FPS · UVC | ORB-based room recognition |
+| Bluetooth Headphones | A2DP audio | espeak-ng TTS output |
+
 ---
 
-<!-- Slide 5: Code — Obstacle Detection -->
-## C. Key Code — Obstacle Detection
+<!-- ─── SLIDE 6: Code — Obstacle Detection ────────────── -->
+## C. Code — Obstacle Detection
 
-**`src/nav_assistant/obstacle/detector.py`**
+`src/nav_assistant/obstacle/detector.py`
 
 ```python
 def check(self, tof_frame: ToFFrame) -> Optional[ObstacleAlert]:
-    # Get minimum depth in the central forward zone
+    # Check only the central third of the frame (forward path)
     min_depth = tof_frame.forward_min_depth(zone_fraction=0.33)
 
     if min_depth > 0 and min_depth < self._threshold:
         now = time.monotonic()
+        # Cooldown prevents repeated alerts for the same obstacle
         if now - self._last_alert_time >= self._cooldown:
             self._last_alert_time = now
             return ObstacleAlert(min_depth=min_depth, ...)
 
-    return None  # no alert
+    return None
 ```
 
-- Only the **central third** of the depth frame is checked (forward path)
-- A **cooldown** (2s) prevents repeated alerts for the same obstacle
-- Output: *"Obstacle detected 0.8 metres ahead."*
+<div class="cols">
+
+- Central **33% of the depth frame** = forward path only
+- Threshold configurable in `config/default.yaml` (default: **1.2m**)
+- **2s cooldown** between alerts for same obstacle
+
+**Output examples:**
+- *"Warning! Obstacle very close."* (< 0.5m)
+- *"Obstacle ahead, 0.8 metres."*
+- *"Obstacle detected ahead."*
+
+</div>
 
 ---
 
-<!-- Slide 6: Code — Location Recognition -->
-## C. Key Code — Location Recognition
+<!-- ─── SLIDE 7: Code — Location Recognition ──────────── -->
+## C. Code — Location Recognition
 
-**`src/nav_assistant/localization/place_recognizer.py`**
+`src/nav_assistant/localization/place_recognizer.py`
 
 ```python
 def recognize(self, gray_frame: np.ndarray) -> RecognitionResult:
@@ -209,121 +286,155 @@ def recognize(self, gray_frame: np.ndarray) -> RecognitionResult:
 
     for waypoint, stored_descs in self._index:
         matches = self._matcher.knnMatch(query_descs, stored_descs, k=2)
-        # Lowe's ratio test — keep only strong matches
-        good = [m for m, n in matches
-                if m.distance < 0.75 * n.distance]
-
+        # Lowe's ratio test — keep only unambiguous matches
+        good = [m for m, n in matches if m.distance < 0.75 * n.distance]
         if len(good) > best_good:
-            best_good = len(good)
-            best_wp = waypoint
+            best_good, best_wp = len(good), waypoint
 
     confidence = min(1.0, best_good / 250)
     return RecognitionResult(waypoint=best_wp, confidence=confidence, ...)
 ```
 
-**Training:** 40 frames × 500 features = 5000 descriptors per location
+<div class="cols">
+
+**Training data per location**
+- 2-minute walk-around session
+- 1 frame every 3 seconds → 40 frames
+- 40 × 500 features → **5000 descriptors stored**
+
+**Why ORB over deep learning?**
+- Runs on CPU, no GPU needed
+- No training data required
+- Built into OpenCV
+
+</div>
 
 ---
 
-<!-- Slide 7: Current Progress -->
+<!-- ─── SLIDE 8: Current Progress ─────────────────────── -->
 ## Current Progress
 
-<br>
-
-| Phase | Status | Description |
+| Phase | Status | What was done |
 |---|---|---|
-| Phase 1 — Sensors | ✅ Complete | Webcam + ToF working on RPi hardware |
-| Phase 2 — Training | ✅ Complete | 2 locations trained (5000 descriptors each) |
-| Phase 3 — Awareness | 🔄 In Progress | Awareness loop built, testing underway |
-| Phase 4 — Tuning | ⏳ Pending | Threshold and confidence tuning |
+| 1 — Sensor Integration | ✅ Complete | Webcam + ToF validated on RPi hardware |
+| 2 — Location Training | ✅ Complete | 2 locations, 5000 descriptors each |
+| 3 — Awareness Loop | 🔄 In Progress | Loop built and running, testing ongoing |
+| 4 — Tuning & Polish | ⏳ Pending | Confidence and threshold tuning |
 
 <br>
 
-**What runs today:**
-- `test_sensors.py` — validates both cameras
-- `train.py` — 2-minute capture sessions per location
-- `awareness.py` — real-time obstacle + location detection loop
+**Scripts running on hardware today:**
+
+| Script | Purpose |
+|---|---|
+| `test_sensors.py` | Validates webcam + ToF connectivity |
+| `train.py` | 2-min capture sessions, auto-detects cameras |
+| `awareness.py` | Real-time obstacle + location feedback loop |
 
 ---
 
-<!-- Slide 8: Challenges & Solutions -->
+<!-- ─── SLIDE 9: Challenges & Solutions ───────────────── -->
 ## E. Challenges & Solutions
 
-| Challenge | Root Cause | Solution |
-|---|---|---|
-| Wrong camera device index | USB webcam index not stable across reboots | Auto-detect by V4L2 device name at startup |
-| ToF SDK `DeviceType.TOF` missing | API changed between SDK versions | Use `FrameType.DEPTH`, parse official examples |
-| pyttsx3 voice error | Broken espeak-ng driver on Python 3.13 | Call `espeak-ng` directly via subprocess |
-| Webcam returns blank frames | UVC sensor warmup time | Discard first 5 frames after `open()` |
-| Single frame per location insufficient | ORB needs visual diversity | 2-minute continuous capture session (40 frames) |
+| Challenge | Solution |
+|---|---|
+| Webcam gets random `/dev/videoX` index across reboots | Parse `v4l2-ctl --list-devices` at startup, match by device name |
+| Arducam SDK `DeviceType.TOF` doesn't exist in installed version | Use `FrameType.DEPTH` — discovered by reading official Python examples |
+| `pyttsx3` crashes on Python 3.13 + espeak-ng | Call `espeak-ng` directly via `subprocess` — no TTS library needed |
+| Webcam returns blank frames right after `open()` | Discard first 5 frames to allow UVC sensor warmup |
+| Single training frame insufficient for reliable recognition | 2-minute continuous capture session (40 diverse frames per location) |
 
 ---
 
-<!-- Slide 9: Expected Output & Benefits -->
+<!-- ─── SLIDE 10: Expected Output & Benefits ───────────── -->
 ## F. Expected Output & Benefits
 
-**What the system says to the user:**
+<div class="cols">
+
+<div>
+
+**What the user hears:**
 
 ```
 "Awareness system started."
 
 "You are in the office."
 
-"Obstacle detected 0.8 metres ahead."
-
-"You are still in the office."
+"Obstacle ahead, 0.8 metres."
 
 "You are in the hallway."
+
+"Warning! Obstacle very close."
 ```
 
-<br>
+</div>
+
+<div>
 
 **Benefits:**
-- **No internet required** — works in any indoor space
-- **Low cost** — standard Raspberry Pi hardware (~€80 total)
-- **Extensible** — architecture supports future route navigation
-- **Practical** — real-time feedback at 2 Hz, < 500ms latency
+
+- **Offline** — works without internet in any indoor space
+- **Low cost** — ~€80 total hardware
+- **Real-time** — 2 Hz loop, < 500ms response
+- **Wearable** — Bluetooth audio, cane form factor
+- **Extensible** — architecture ready for navigation features
+
+</div>
+</div>
 
 ---
 
-<!-- Slide 10: Next Steps -->
-## G. Next Steps & Project Plan
+<!-- ─── SLIDE 11: Next Steps ───────────────────────────── -->
+## G. Next Steps & Future Plan
 
-<br>
+<div class="cols">
 
-**Immediate (this week)**
+<div>
+
+**This week**
 - End-to-end test of `awareness.py` on hardware
-- Tune `confidence_threshold` and `min_good_matches` for reliable recognition
-- Tune `alert_threshold_m` for comfortable obstacle warning distance
+- Tune `confidence_threshold` and `alert_threshold_m`
+- Train more locations in real environment
 
-**Short term (next 2 weeks)**
-- Train more locations in the real test environment
-- Add startup / shutdown audio announcements
-- CPU profiling and frame rate optimization on RPi
+**Before submission**
+- Startup/shutdown audio announcements
+- CPU profiling and frame rate optimization
+- Final demo recording
+
+</div>
+
+<div>
 
 **Future work (post-submission)**
-- Route planning and turn-by-turn navigation
-- IMU integration for step counting
-- SLAM for unknown environments
+
+Originally planned as v1 — preserved as future roadmap:
+
+- 🗺️ Visual SLAM / indoor map building
+- 🧭 Route planning (Dijkstra on waypoint graph)
+- 🦾 Turn-by-turn navigation instructions
+- 📐 IMU dead-reckoning between locations
+- 🤖 MobileNetV3 for richer scene recognition
+
+</div>
+</div>
 
 ---
 <!-- class: lead -->
 
-<!-- Slide 11: Thank You -->
+<!-- ─── SLIDE 12: Thank You ────────────────────────────── -->
+
 # Thank You
+
+## Smart Cane Environmental Awareness System
+
+### *AI Smart Navigation Assistant for Visually Impaired People*
 
 <br>
 
-**Smart Cane Environmental Awareness System**
+**Igor Xavier** &nbsp;·&nbsp; **Fang Jialuo**
 
 <br>
 
 🔗 `github.com/w1ggor/smart-nav-cane`
-
-<br>
-
-*Built with Raspberry Pi 4 · Arducam ToF · OpenCV · Python*
-
-<br>
 
 ### Questions?
