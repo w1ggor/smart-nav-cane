@@ -46,3 +46,20 @@ audio:
 
 data:
   environments_dir: data/environments
+
+navigation:
+  # Center-zone depth (m) above which the path is considered clear ("go straight")
+  clear_distance_m: 1.0
+  # Maximum distance (m) at which a recognized landmark (e.g. a door) is announced
+  landmark_distance_m: 1.5
+  # Tight safety override threshold during guided navigation — independent
+  # of clear_distance_m, only for something dangerously close
+  emergency_threshold_m: 0.4
+  # Re-speak the same guidance message after this many seconds even if unchanged
+  repeat_interval_s: 4.0
+
+speech:
+  # Path to an unzipped Vosk model directory. Download from:
+  # https://alphacephei.com/vosk/models  (vosk-model-small-en-us-0.15 recommended)
+  model_path: "models/vosk-model-small-en-us-0.15"
+  sample_rate: 16000

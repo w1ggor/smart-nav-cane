@@ -57,10 +57,11 @@ class WaypointRecorder:
         duration_s: float = 120.0,
         interval_s: float = 3.0,
         notes: str = "",
+        kind: str = "location",
     ) -> tuple[Waypoint, int]:
         """
         Continuously capture frames for `duration_s` seconds, sampling every
-        `interval_s` seconds, and store (or append to) a named location.
+        `interval_s` seconds, and store (or append to) a named waypoint.
 
         Walk around the room slowly during capture to give the system visual
         diversity — different angles, positions, and depths all improve
@@ -70,6 +71,13 @@ class WaypointRecorder:
 
         If the label already exists, new descriptors are merged with the
         stored ones (capped at _MAX_DESCRIPTORS total, random-sampled).
+
+        Args:
+            kind: "location" (a room/place — selectable destination, can be
+                announced as "you are in the X") or "landmark" (a feature
+                along a path, e.g. "door" — announced when encountered during
+                guided navigation but never a destination or location
+                announcement).
 
         Returns:
             (waypoint, total_descriptor_count)
@@ -103,6 +111,7 @@ class WaypointRecorder:
                 descriptor_path="",
                 depth_profile=depth_profile,
                 notes=notes,
+                kind=kind,
             )
             final_descs = self._subsample(merged, _MAX_DESCRIPTORS)
             npy_path = self._env.descriptor_path(wp.id)

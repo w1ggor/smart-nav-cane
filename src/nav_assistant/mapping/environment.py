@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS waypoints (
     descriptor_path TEXT NOT NULL,
     depth_profile   TEXT NOT NULL,
     created_at      TEXT NOT NULL,
-    notes           TEXT NOT NULL DEFAULT ''
+    notes           TEXT NOT NULL DEFAULT '',
+    kind            TEXT NOT NULL DEFAULT 'location'
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -69,8 +70,18 @@ class EnvironmentMap:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(_SCHEMA)
+        self._migrate_add_kind_column()
         self._conn.commit()
         logger.info("EnvironmentMap '%s' opened at %s", self.name, self._db_path)
+
+    def _migrate_add_kind_column(self) -> None:
+        """Add the 'kind' column to databases created before it existed."""
+        try:
+            self._conn.execute(
+                "ALTER TABLE waypoints ADD COLUMN kind TEXT NOT NULL DEFAULT 'location'"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def close(self) -> None:
         if self._conn is not None:
@@ -100,8 +111,8 @@ class EnvironmentMap:
         self._require_open()
         d = wp.to_dict()
         self._conn.execute(
-            "INSERT INTO waypoints (id, label, descriptor_path, depth_profile, created_at, notes) "
-            "VALUES (:id, :label, :descriptor_path, :depth_profile, :created_at, :notes)",
+            "INSERT INTO waypoints (id, label, descriptor_path, depth_profile, created_at, notes, kind) "
+            "VALUES (:id, :label, :descriptor_path, :depth_profile, :created_at, :notes, :kind)",
             d,
         )
         self._conn.commit()
@@ -121,9 +132,15 @@ class EnvironmentMap:
         ).fetchone()
         return Waypoint.from_dict(dict(row)) if row else None
 
-    def list_waypoints(self) -> list[Waypoint]:
+    def list_waypoints(self, kind: Optional[str] = None) -> list[Waypoint]:
+        """List waypoints, optionally filtered by kind ('location' or 'landmark')."""
         self._require_open()
-        rows = self._conn.execute("SELECT * FROM waypoints ORDER BY created_at").fetchall()
+        if kind is not None:
+            rows = self._conn.execute(
+                "SELECT * FROM waypoints WHERE kind = ? ORDER BY created_at", (kind,)
+            ).fetchall()
+        else:
+            rows = self._conn.execute("SELECT * FROM waypoints ORDER BY created_at").fetchall()
         return [Waypoint.from_dict(dict(r)) for r in rows]
 
     def delete_waypoint(self, waypoint_id: str) -> None:

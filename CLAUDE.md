@@ -7,10 +7,10 @@
 
 ## Project Overview
 
-An IoT + Edge AI environmental awareness assistant running entirely on a Raspberry Pi 4. The device is worn or carried like a smart cane and provides two core functions:
+An IoT + Edge AI environmental awareness assistant running entirely on a Raspberry Pi 4. The device is worn or carried like a smart cane and provides two modes:
 
-1. **Obstacle detection** — the ToF camera continuously measures forward depth; anything within a configurable threshold triggers an audio alert.
-2. **Location recognition** — the webcam matches the current scene against a database of trained locations using ORB feature descriptors; when the user enters a recognized space they are told where they are.
+1. **Awareness mode** (`scripts/awareness.py`) — obstacle detection via ToF depth threshold + passive location announcements via ORB recognition. No destination, no guidance.
+2. **Guided navigation mode** (`scripts/navigate_voice.py`) — the user speaks a destination ("kitchen"), and the cane gives turn-by-turn audio guidance using reactive wall-following on the ToF depth frame, announces trained landmarks (e.g. doors) along the way, and confirms arrival.
 
 The system runs fully offline. No cloud services, no internet required.
 
@@ -29,6 +29,7 @@ The system runs fully offline. No cloud services, no internet required.
 | Depth Camera | Arducam ToF Camera B0410 | CSI | Real-time obstacle depth measurement |
 | RGB Camera | USB Webcam (C270 HD WEBCAM) | USB (UVC) | Location/room recognition |
 | Audio Output | Bluetooth Headphones | Bluetooth (A2DP) | Spoken alerts and announcements |
+| Audio Input | Bluetooth headset mic or USB mic | Bluetooth (HSP/HFP) or USB | Voice destination input for guided navigation |
 
 ### Optional Future Hardware (not dependencies)
 - IMU (MPU-6050): Step counting for future navigation features
@@ -52,6 +53,26 @@ Webcam frame → PlaceRecognizer → audio announce if location changes
 
 The loop is intentionally simple — no state machine, no route planning, no graph traversal.
 
+### Guided Navigation — Reactive Wall-Following (no IMU/odometry)
+There is no IMU and no wheel encoder on this hardware, so the guided navigation mode does **not** plan a path to arbitrary coordinates the way SLAM-based navigation would. Instead it reacts to the live ToF depth frame every cycle:
+
+```
+ToF frame → split into left / center / right zones (zone_depths())
+  center clear  → "Go straight"
+  center blocked, left clearer  → "Turn left"
+  center blocked, right clearer → "Turn right"
+  both sides blocked            → "Path blocked. Please stop."
+```
+
+This is combined with two ORB recognizers:
+- **Location recognizer** (`kind="location"`) — checked every cycle; if the current view matches the destination label with sufficient confidence, guidance ends with "You have arrived."
+- **Landmark recognizer** (`kind="landmark"`) — trained the same way as locations (e.g. capture a door), but announced ("Door ahead.") rather than treated as a destination, only when recognized AND within `landmark_distance_m` on the ToF center zone.
+
+**Important limitation:** this approach works for a known, previously walked route in a fixed environment — it reacts correctly to walls and openings it can currently see, but it has no memory of the overall layout and cannot route around an obstacle to reach a destination it can't directly perceive. True path planning would need IMU/odometry or SLAM (see Future Work).
+
+### Voice Destination Input — Vosk (offline STT)
+`navigate_voice.py` asks "Where do you want to go?" and listens via the default microphone (Bluetooth headset mic or USB). Speech is transcribed locally using [Vosk](https://alphacephei.com/vosk/models) (`vosk-model-small-en-us-0.15`, ~40MB) — no internet, no cloud STT. The transcribed text is matched against the trained `location` labels by substring match; the first match wins. If no Vosk model is installed, `--destination <label>` bypasses voice entirely.
+
 ### Location Recognition — ORB Feature Matching
 - Webcam frames are matched against stored location descriptors using ORB (OpenCV built-in)
 - Each trained location stores an ORB descriptor matrix (.npy) and a ToF depth profile
@@ -71,13 +92,8 @@ The loop is intentionally simple — no state machine, no route planning, no gra
 - Location announcements: non-blocking (background thread)
 - Obstacle alerts: blocking (~0.3s) to guarantee immediate delivery
 
-### Why Not SLAM / ROS / Navigation
-Full indoor navigation requires:
-- Accurate step counting or odometry (no IMU available)
-- Map building and localization simultaneously (computationally expensive)
-- Safe real-time path planning with obstacle avoidance
-
-These are left as future work. The awareness system provides real value without them.
+### Why Not Full SLAM / ROS
+Full indoor mapping (building a 3D map and localizing within it simultaneously) is computationally expensive and was the original project vision. It's preserved as future work — see below. Guided navigation today uses lightweight reactive wall-following instead, which is achievable on this hardware and still demonstrates real turn-by-turn guidance for a known route.
 
 ---
 
@@ -89,28 +105,31 @@ src/nav_assistant/
 │   ├── base.py               # Abstract ISensor interface
 │   ├── webcam.py             # USB webcam (OpenCV, V4L2 auto-detect)
 │   ├── tof.py                # Arducam ToF B0410 (SDK, V4L2 auto-detect)
+│   │                         #   .zone_depths() → (left, center, right) for wall-following
 │   └── utils.py              # V4L2 device name detection shared utility
 ├── mapping/
-│   ├── waypoint.py           # Location dataclass + serialization
-│   ├── environment.py        # SQLite-backed location store
-│   └── recorder.py           # Training: capture + store locations
+│   ├── waypoint.py           # Waypoint dataclass (kind: "location" | "landmark")
+│   ├── environment.py        # SQLite-backed store, filterable by kind
+│   └── recorder.py           # Training: capture + store locations/landmarks
 ├── localization/
-│   └── place_recognizer.py   # ORB matching → current location
+│   └── place_recognizer.py   # ORB matching → current location/landmark, filterable by kind
+├── navigation/
+│   ├── guided_navigator.py   # GuidedNavigator: wall-following + landmark + arrival
+│   ├── route_graph.py        # Dijkstra route planning (future — not used today)
+│   └── navigator.py          # Graph-based nav state machine (future — not used today)
+├── speech/
+│   └── recognizer.py         # VoiceRecognizer: offline Vosk STT for destination input
 ├── obstacle/
 │   └── detector.py           # ToF depth threshold → ObstacleAlert
 ├── audio/
 │   └── guidance.py           # TTS (espeak-ng) + obstacle beep
-└── awareness.py              # AwarenessSystem: main loop coordinator
+└── awareness.py              # AwarenessSystem: simple awareness-mode loop coordinator
 
 scripts/
-├── train.py                  # CLI: capture and store named locations
-├── awareness.py              # Entry point: run the awareness system
-└── test_sensors.py           # Hardware validation
-
-Future work (stubs present, not active):
-└── navigation/
-    ├── route_graph.py        # Dijkstra route planning (future)
-    └── navigator.py          # Navigation state machine (future)
+├── train.py                  # CLI: capture/append locations and landmarks
+├── awareness.py               # Entry point: passive awareness mode
+├── navigate_voice.py          # Entry point: guided navigation (voice + turn-by-turn)
+└── test_sensors.py            # Hardware validation
 ```
 
 ### Data Flow
@@ -125,16 +144,19 @@ ToFSensor    → depth → ObstacleDetector → alert         → AudioGuidance
 
 ```python
 @dataclass
-class Waypoint:          # represents a named location / room
+class Waypoint:          # represents a named location, room, or landmark
     id: str              # UUID
-    label: str           # Human name: "hallway", "kitchen", "office"
+    label: str           # Human name: "hallway", "kitchen", "door_kitchen_entrance"
     descriptor_path: str # Path to .npy ORB descriptor matrix
     depth_profile: list[float]  # 9-cell depth grid (3×3) from ToF
     created_at: str
     notes: str
+    kind: str             # "location" (destination/announcement) | "landmark" (announced along the way)
 ```
 
-Edges between locations are stored in SQLite but are **not used** in the current version. They are preserved for future navigation features.
+`kind` is stored as a SQLite column with a migration step (`ALTER TABLE ... ADD COLUMN`) so older environment databases upgrade automatically on next open. `EnvironmentMap.list_waypoints(kind=...)` and `PlaceRecognizer.load(kind=...)` filter by it — guided navigation keeps two separate recognizer instances, one per kind.
+
+Edges between locations are stored in SQLite but are **not used** by the current guided navigation (which is reactive, not graph-based). They are preserved for the future graph-based `RouteGraph`/`Navigator` modules.
 
 ---
 
@@ -153,26 +175,33 @@ Edges between locations are stored in SQLite but are **not used** in the current
 - [x] Training CLI (train.py)
 - [x] First environment captured on hardware (lab_test: door, office)
 
-### Phase 3 — Awareness Loop ← CURRENT
+### Phase 3 — Awareness Loop ✅ COMPLETE
 - [x] ObstacleDetector (ToF depth threshold)
 - [x] PlaceRecognizer (ORB matching)
 - [x] AudioGuidance (espeak-ng)
-- [ ] AwarenessSystem coordinator (main loop)
-- [ ] awareness.py entry point script
-- [ ] End-to-end test on hardware
+- [x] AwarenessSystem coordinator (main loop)
+- [x] awareness.py entry point script
+- [x] End-to-end test on hardware
 
-### Phase 4 — Tuning & Polish
-- [ ] Confidence threshold tuning (min matches for location announcement)
-- [ ] Obstacle alert threshold tuning (distance, cooldown)
-- [ ] Location announcement cooldown (suppress repeat announcements)
+### Phase 4 — Guided Navigation ← CURRENT
+- [x] Waypoint `kind` field (location vs landmark) + EnvironmentMap migration
+- [x] `ToFFrame.zone_depths()` for wall-following (left/center/right)
+- [x] `GuidedNavigator`: arrival detection, landmark announcement, turn/straight logic
+- [x] `VoiceRecognizer`: offline Vosk STT for destination input
+- [x] `navigate_voice.py` entry point
+- [x] `train.py` support for capturing landmarks (`landmark <label>`)
+- [ ] End-to-end hardware test of the full guided navigation flow
+- [ ] Tune `clear_distance_m`, `landmark_distance_m`, `emergency_threshold_m` for the real test route
+
+### Phase 5 — Tuning & Polish
+- [ ] Confidence threshold tuning (min matches for location/landmark announcement)
 - [ ] CPU profiling on RPi, frame rate optimization
 - [ ] Graceful startup / shutdown (announcements on start/stop)
 
-### Future Work (not in scope for v1)
-- Route planning and turn-by-turn navigation
-- Waypoint edge recording and graph traversal
+### Future Work (not in scope for this submission)
+- Visual SLAM / indoor map building (the original project vision)
+- Graph-based route planning (Dijkstra on the existing `WaypointEdge` model) for routes spanning more than one reactive leg
 - Dead-reckoning with IMU between locations
-- SLAM integration for unknown environments
 - MobileNetV3 or similar for more robust location recognition
 - Multi-environment support with automatic environment selection
 
@@ -180,9 +209,9 @@ Edges between locations are stored in SQLite but are **not used** in the current
 
 ## Current Status
 
-**Phase:** 3 — Awareness Loop  
-**Last Updated:** 2026-06-07  
-**Working On:** AwarenessSystem coordinator + awareness.py entry point
+**Phase:** 4 — Guided Navigation  
+**Last Updated:** 2026-06-08  
+**Working On:** End-to-end hardware test of voice destination + turn-by-turn + landmark guidance
 
 ---
 
@@ -191,22 +220,28 @@ Edges between locations are stored in SQLite but are **not used** in the current
 - Project structure initialized
 - WebcamSensor with V4L2 device name auto-detection (no hardcoded indices)
 - ToFSensor with Arducam SDK + V4L2 device name auto-detection
-- Waypoint/location data model (SQLite + .npy)
-- EnvironmentMap persistent storage
-- Training CLI — capture named locations from webcam + ToF
-- PlaceRecognizer — ORB feature matching against stored locations
+- Waypoint data model (SQLite + .npy) with `kind` field (location/landmark)
+- EnvironmentMap persistent storage with kind-filtered queries and auto-migration
+- Training CLI — capture named locations and landmarks from webcam + ToF
+- PlaceRecognizer — ORB feature matching, filterable by waypoint kind
 - ObstacleDetector — ToF depth threshold with cooldown
 - AudioGuidance — espeak-ng subprocess on Linux, pyttsx3 fallback
+- AwarenessSystem — passive obstacle + location announcement loop
+- `ToFFrame.zone_depths()` — left/center/right depth split for wall-following
+- GuidedNavigator — reactive turn-by-turn guidance, landmark announcements, arrival detection
+- VoiceRecognizer — offline Vosk speech-to-text for destination input
+- navigate_voice.py — full guided navigation entry point
 - First real environment captured on hardware (lab_test)
 
 ---
 
 ## Pending Tasks
 
-- Implement AwarenessSystem coordinator class
-- Implement awareness.py entry point
-- End-to-end hardware test of full awareness loop
-- Tune confidence and obstacle thresholds for real environment
+- End-to-end hardware test of navigate_voice.py (voice input → guidance → arrival)
+- Train at least one landmark (door) and confirm announcement during navigation
+- Tune `clear_distance_m`, `landmark_distance_m`, `emergency_threshold_m` for the real test route
+- Download and verify the Vosk model on the Raspberry Pi (not yet tested on ARM)
+- Confirm Bluetooth headset microphone is usable as the default audio input device
 
 ---
 

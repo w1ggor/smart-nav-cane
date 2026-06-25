@@ -114,6 +114,26 @@ pactl set-default-sink bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink
 espeak-ng "Hello world"
 ```
 
+### Microphone for voice destination input (guided navigation)
+
+Most Bluetooth headsets expose a microphone alongside the A2DP audio sink as
+an HSP/HFP source. Confirm it is visible to the system:
+
+```bash
+arecord -l
+# or
+pactl list sources short
+```
+
+If no Bluetooth mic is available, any USB microphone works — `sounddevice`
+uses the default input device, configurable with `pactl set-default-source`.
+
+Test the microphone is captured correctly:
+
+```bash
+arecord -d 3 -f cd test.wav && aplay test.wav
+```
+
 ---
 
 ## 6. Find Camera Device Indices
@@ -171,27 +191,65 @@ source .venv/bin/activate
 python scripts/train.py --env my_home
 
 # Commands in training session:
-#   capture front_door
-#   capture hallway_middle
-#   edge front_door hallway_middle 15 forward "Walk forward 15 steps."
+#   capture kitchen              -> trains a destination location
+#   landmark kitchen_door        -> trains a landmark (announced, not selectable)
 #   list
 #   quit
 ```
 
+Use `capture` for rooms the user can be told they are in or navigate to.
+Use `landmark` for features along the way (doors, stairs) that should be
+announced during guided navigation but are never a destination.
+
 ---
 
-## 9. Running Navigation Mode
+## 9. Installing the Vosk Speech Model (voice destination input)
+
+`navigate_voice.py` uses [Vosk](https://alphacephei.com/vosk/models) for
+fully offline speech recognition — no internet required at runtime.
 
 ```bash
-source .venv/bin/activate
-python scripts/navigate.py --env my_home --destination kitchen_door
+pip install vosk sounddevice
+
+mkdir -p models
+cd models
+wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip vosk-model-small-en-us-0.15.zip
+cd ..
 ```
 
-Press `Ctrl+C` to stop navigation.
+Confirm the path in `config/default.yaml` matches:
+```yaml
+speech:
+  model_path: "models/vosk-model-small-en-us-0.15"
+```
+
+If the model is missing, `navigate_voice.py` logs a warning and you must
+pass `--destination <label>` instead of using voice input.
 
 ---
 
-## 10. Performance Tuning
+## 10. Running Navigation Modes
+
+**Simple awareness mode** (obstacle alerts + location announcements, no destination):
+```bash
+python scripts/awareness.py --env my_home
+```
+
+**Guided navigation** (voice destination + turn-by-turn + landmark announcements):
+```bash
+python scripts/navigate_voice.py --env my_home
+# Speaks "Where do you want to go?" then listens via the microphone
+
+# Or skip voice input entirely:
+python scripts/navigate_voice.py --env my_home --destination kitchen
+```
+
+Press `Ctrl+C` to stop either mode.
+
+---
+
+## 11. Performance Tuning
 
 ```bash
 # Check CPU temperature during operation
@@ -216,7 +274,7 @@ dtoverlay=vc4-kms-v3d
 
 ---
 
-## 11. Auto-Start on Boot (Optional)
+## 12. Auto-Start on Boot (Optional)
 
 ```bash
 # Create systemd service

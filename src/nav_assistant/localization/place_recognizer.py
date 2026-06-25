@@ -63,10 +63,16 @@ class PlaceRecognizer:
         self._matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         self._index: list[tuple[Waypoint, np.ndarray]] = []  # (waypoint, descriptors)
 
-    def load(self) -> None:
-        """Load all waypoint descriptors from disk into memory."""
+    def load(self, kind: Optional[str] = None) -> None:
+        """
+        Load waypoint descriptors from disk into memory.
+
+        Args:
+            kind: If set, only load waypoints of this kind ('location' or
+                'landmark'). If None, loads all waypoints regardless of kind.
+        """
         self._index.clear()
-        waypoints = self._env.list_waypoints()
+        waypoints = self._env.list_waypoints(kind=kind)
         for wp in waypoints:
             try:
                 descs = np.load(wp.descriptor_path)

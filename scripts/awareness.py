@@ -105,7 +105,7 @@ def main() -> None:
             min_good_matches=loc_cfg["min_good_matches"],
             lowe_ratio=loc_cfg["match_ratio"],
         )
-        recognizer.load()
+        recognizer.load(kind="location")
 
         system = AwarenessSystem(
             webcam=webcam,

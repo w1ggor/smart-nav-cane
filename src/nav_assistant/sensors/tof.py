@@ -86,6 +86,33 @@ class ToFFrame:
         valid = zone[zone > 0]
         return float(valid.min()) if valid.size > 0 else 0.0
 
+    def zone_depths(self, vertical_fraction: float = 0.9) -> tuple[float, float, float]:
+        """
+        Split the frame into three equal-width vertical zones (left, center,
+        right) and return the minimum valid depth (metres) in each.
+
+        vertical_fraction restricts the vertical extent before splitting,
+        excluding floor/ceiling rows that tend to be noisy.
+
+        Used for reactive wall-following navigation: compare the three
+        values to decide whether to go straight or turn toward open space.
+        Returns 0.0 for any zone with no valid pixels.
+        """
+        h, w = self.depth.shape
+        mh = int(h * (1 - vertical_fraction) / 2)
+        band = self.depth[mh:h - mh, :]
+
+        third = w // 3
+        left = band[:, :third]
+        center = band[:, third:2 * third]
+        right = band[:, 2 * third:]
+
+        def _min_valid(zone: np.ndarray) -> float:
+            valid = zone[zone > 0]
+            return float(valid.min()) if valid.size > 0 else 0.0
+
+        return _min_valid(left), _min_valid(center), _min_valid(right)
+
 
 class ToFSensor(ISensor):
     """

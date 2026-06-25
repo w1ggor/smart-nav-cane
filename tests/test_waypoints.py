@@ -157,3 +157,88 @@ def test_tof_forward_min_depth():
     frame = ToFFrame(depth=depth, confidence=np.zeros_like(depth), timestamp=time.monotonic())
     min_d = frame.forward_min_depth(zone_fraction=0.33)
     assert min_d == pytest.approx(0.8, abs=0.01)
+
+
+def test_tof_zone_depths_uniform():
+    from nav_assistant.sensors.tof import ToFFrame
+    import time
+    depth = np.ones((180, 240), dtype=np.float32) * 2.0
+    frame = ToFFrame(depth=depth, confidence=np.zeros_like(depth), timestamp=time.monotonic())
+    left, center, right = frame.zone_depths()
+    assert left == pytest.approx(2.0)
+    assert center == pytest.approx(2.0)
+    assert right == pytest.approx(2.0)
+
+
+def test_tof_zone_depths_blocked_center():
+    from nav_assistant.sensors.tof import ToFFrame
+    import time
+    depth = np.ones((180, 240), dtype=np.float32) * 3.0
+    third = 240 // 3
+    depth[:, third:2 * third] = 0.5  # block the center column only
+    frame = ToFFrame(depth=depth, confidence=np.zeros_like(depth), timestamp=time.monotonic())
+    left, center, right = frame.zone_depths()
+    assert left == pytest.approx(3.0)
+    assert center == pytest.approx(0.5)
+    assert right == pytest.approx(3.0)
+
+
+# ---- Waypoint kind ----
+
+def test_waypoint_default_kind_is_location():
+    wp = Waypoint(label="kitchen", descriptor_path="/tmp/k.npy", depth_profile=[0.0] * 9)
+    assert wp.kind == "location"
+
+
+def test_waypoint_landmark_kind():
+    wp = Waypoint(label="door", descriptor_path="/tmp/d.npy", depth_profile=[0.0] * 9, kind="landmark")
+    assert wp.kind == "landmark"
+
+
+def test_waypoint_invalid_kind_raises():
+    with pytest.raises(ValueError, match="kind"):
+        Waypoint(label="bad", descriptor_path="/tmp/b.npy", depth_profile=[0.0] * 9, kind="portal")
+
+
+def test_waypoint_kind_roundtrip_through_dict():
+    wp = Waypoint(label="door", descriptor_path="/tmp/d.npy", depth_profile=[0.0] * 9, kind="landmark")
+    restored = Waypoint.from_dict(wp.to_dict())
+    assert restored.kind == "landmark"
+
+
+def test_environment_list_waypoints_filtered_by_kind(tmp_env):
+    tmp_env.add_waypoint(Waypoint(label="kitchen", descriptor_path="/tmp/k.npy", depth_profile=[0.0] * 9, kind="location"))
+    tmp_env.add_waypoint(Waypoint(label="door", descriptor_path="/tmp/d.npy", depth_profile=[0.0] * 9, kind="landmark"))
+
+    locations = tmp_env.list_waypoints(kind="location")
+    landmarks = tmp_env.list_waypoints(kind="landmark")
+
+    assert [w.label for w in locations] == ["kitchen"]
+    assert [w.label for w in landmarks] == ["door"]
+    assert len(tmp_env.list_waypoints()) == 2
+
+
+# ---- GuidedNavigator wall-following logic ----
+
+def test_wall_following_clear_center_goes_straight():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
+    result = nav._wall_following(left=2.0, center=2.0, right=2.0)
+    assert result.command == NavCommand.STRAIGHT
+
+
+def test_wall_following_blocked_center_turns_toward_clearer_side():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
+    result = nav._wall_following(left=2.0, center=0.5, right=0.3)
+    assert result.command == NavCommand.TURN_LEFT
+
+    result = nav._wall_following(left=0.3, center=0.5, right=2.0)
+    assert result.command == NavCommand.TURN_RIGHT
+
+
+def test_wall_following_fully_blocked_stops():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
+    result = nav._wall_following(left=0.0, center=0.4, right=0.0)
+    assert result.command == NavCommand.STOP

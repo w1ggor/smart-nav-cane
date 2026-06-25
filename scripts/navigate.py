@@ -95,7 +95,7 @@ def main() -> None:
             min_good_matches=cfg["localization"]["min_good_matches"],
             lowe_ratio=cfg["localization"]["match_ratio"],
         )
-        recognizer.load()
+        recognizer.load(kind="location")
 
         graph = RouteGraph(env)
         graph.build()

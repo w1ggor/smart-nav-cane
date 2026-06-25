@@ -20,6 +20,13 @@ class Waypoint:
     depth_profile is a 9-element flat array (3x3 grid) of median depths
     in metres, captured at waypoint creation time. Used as a secondary
     signal to disambiguate visually similar locations.
+
+    kind distinguishes two roles for the same underlying data structure:
+      - "location": a room/place the user can be announced to be in, or
+        select as a navigation destination (e.g. "kitchen", "office").
+      - "landmark": a recognizable feature along a path (e.g. "door") that
+        is announced when encountered during guided navigation, but is
+        never itself a destination or a "you are here" announcement.
     """
 
     label: str
@@ -30,6 +37,13 @@ class Waypoint:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     notes: str = ""
+    kind: str = "location"         # "location" | "landmark"
+
+    VALID_KINDS = frozenset({"location", "landmark"})
+
+    def __post_init__(self) -> None:
+        if self.kind not in self.VALID_KINDS:
+            raise ValueError(f"kind must be one of {self.VALID_KINDS}, got {self.kind!r}")
 
     # ------------------------------------------------------------------
     # Serialization

@@ -20,6 +20,10 @@ PyYAML>=6.0
 pyttsx3>=2.90; sys_platform != "linux"
 pygame>=2.5.0
 
+# Offline speech recognition for voice destination input (guided navigation)
+vosk>=0.3.45
+sounddevice>=0.4.6
+
 # Arducam ToF SDK — install manually from source on RPi:
 # https://github.com/ArduCAM/Arducam_tof_camera
 # The pip package name on PyPI is: ArducamDepthCamera

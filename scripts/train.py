@@ -11,18 +11,23 @@ Usage:
     python scripts/train.py --env my_home --duration 120 --interval 3
 
 Commands:
-    capture <label>           Capture a location (default: 120s session)
-    capture <label> <seconds> Custom duration, e.g. capture kitchen 60
-    list                      List locations and their descriptor counts
-    delete <label>            Delete a location and its descriptors
-    quit                      Save and exit
+    capture <label>            Capture a location (default: 120s session)
+    capture <label> <seconds>  Custom duration, e.g. capture kitchen 60
+    landmark <label>           Capture a landmark (e.g. a door) — announced
+                               during guided navigation, never a destination
+    landmark <label> <seconds> Custom duration for a landmark capture
+    list                       List all waypoints, their kind and descriptor counts
+    delete <label>             Delete a waypoint and its descriptors
+    quit                       Save and exit
 
 Tips:
   - Walk slowly around the room during capture to maximise diversity.
   - Run 'capture <label>' again from a different angle to add more data.
   - More descriptors = more robust recognition. Aim for 1000+ per location.
+  - Use 'landmark' for features along a path (doors, stairs) that should
+    be announced while navigating but never selected as a destination.
   - 'edge' connections between locations are stored for future navigation
-    but are not required for the awareness system.
+    but are not required for the awareness or guided navigation systems.
 """
 
 from __future__ import annotations
@@ -87,9 +92,11 @@ def run_training_session(
         elif cmd == "help":
             print(__doc__)
 
-        elif cmd == "capture":
+        elif cmd in ("capture", "landmark"):
+            kind = "location" if cmd == "capture" else "landmark"
+
             if len(parts) < 2:
-                print("Usage: capture <label> [seconds]")
+                print(f"Usage: {cmd} <label> [seconds]")
                 continue
 
             label = parts[1]
@@ -100,16 +107,17 @@ def run_training_session(
                 continue
 
             is_new = env.get_waypoint_by_label(label) is None
-            action = "Creating new" if is_new else "Appending to existing"
-            print(f"  {action} location '{label}'.")
+            action = f"Creating new {kind}" if is_new else "Appending to existing"
+            print(f"  {action} '{label}'.")
 
             try:
                 wp, total = recorder.capture_location(
                     label,
                     duration_s=duration,
                     interval_s=default_interval,
+                    kind=kind,
                 )
-                print(f"  Saved '{wp.label}' — {total} total descriptors stored.")
+                print(f"  Saved '{wp.label}' ({wp.kind}) — {total} total descriptors stored.")
                 if total < 500:
                     print("  Tip: run capture again to add more data (aim for 1000+).")
             except RuntimeError as e:
@@ -118,14 +126,14 @@ def run_training_session(
         elif cmd == "list":
             waypoints = env.list_waypoints()
             if not waypoints:
-                print("  No locations captured yet.")
+                print("  No waypoints captured yet.")
             else:
-                print(f"\n  {'Label':20s}  {'Descriptors':12s}  {'ID':8s}")
-                print(f"  {'-'*20}  {'-'*12}  {'-'*8}")
+                print(f"\n  {'Label':20s}  {'Kind':10s}  {'Descriptors':12s}  {'ID':8s}")
+                print(f"  {'-'*20}  {'-'*10}  {'-'*12}  {'-'*8}")
                 for wp in waypoints:
                     n = recorder.descriptor_count(wp.label)
                     quality = "good" if n >= 1000 else ("ok" if n >= 500 else "low")
-                    print(f"  {wp.label:20s}  {n:<8d} [{quality:4s}]  {wp.id[:8]}")
+                    print(f"  {wp.label:20s}  {wp.kind:10s}  {n:<8d} [{quality:4s}]  {wp.id[:8]}")
                 print()
 
         elif cmd == "delete":
