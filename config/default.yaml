@@ -63,3 +63,9 @@ speech:
   # https://alphacephei.com/vosk/models  (vosk-model-small-en-us-0.15 recommended)
   model_path: "models/vosk-model-small-en-us-0.15"
   sample_rate: 16000
+
+perception:
+  # YOLOv8-nano (COCO-pretrained, 80 classes) — classifies WHAT triggered
+  # a ToF obstacle alert. Auto-downloads on first use if not present locally.
+  yolo_model_path: "yolov8n.pt"
+  confidence_threshold: 0.5

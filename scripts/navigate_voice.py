@@ -34,6 +34,7 @@ from nav_assistant.localization.place_recognizer import PlaceRecognizer
 from nav_assistant.mapping.environment import EnvironmentMap
 from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
 from nav_assistant.obstacle.detector import ObstacleDetector
+from nav_assistant.perception.object_detector import ObjectClassifier
 from nav_assistant.sensors.tof import ToFSensor
 from nav_assistant.sensors.webcam import WebcamSensor
 from nav_assistant.speech.recognizer import VoiceRecognizer
@@ -92,6 +93,12 @@ def main() -> None:
         zone_fraction=cfg["obstacle"]["detection_zone_fraction"],
         cooldown_s=2.0,
     )
+    object_classifier = ObjectClassifier(
+        model_path=cfg["perception"]["yolo_model_path"],
+        confidence_threshold=cfg["perception"]["confidence_threshold"],
+    )
+    if object_classifier.is_available:
+        logger.info("YOLO object classification enabled for emergency alerts")
 
     with EnvironmentMap(args.env, environments_dir=cfg["data"]["environments_dir"]) as env:
         locations = env.list_waypoints(kind="location")
@@ -169,7 +176,13 @@ def main() -> None:
                 # Emergency safety override — something dangerously close
                 alert = emergency_detector.check(tof_frame)
                 if alert:
-                    audio.alert(emergency_detector.alert_message(alert))
+                    message = emergency_detector.alert_message(alert)
+                    if object_classifier.is_available:
+                        bgr = webcam.read_bgr()
+                        detection = object_classifier.classify(bgr)
+                        if detection:
+                            message = f"{detection.label.capitalize()} ahead, {alert.min_depth:.1f} metres."
+                    audio.alert(message)
 
                 result = navigator.evaluate(tof_frame, gray, destination)
 

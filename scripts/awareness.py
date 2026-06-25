@@ -28,6 +28,7 @@ from nav_assistant.awareness import AwarenessSystem
 from nav_assistant.localization.place_recognizer import PlaceRecognizer
 from nav_assistant.mapping.environment import EnvironmentMap
 from nav_assistant.obstacle.detector import ObstacleDetector
+from nav_assistant.perception.object_detector import ObjectClassifier
 from nav_assistant.sensors.tof import ToFSensor
 from nav_assistant.sensors.webcam import WebcamSensor
 
@@ -57,6 +58,8 @@ def main() -> None:
                         help="Seconds before re-announcing the same location (default 30)")
     parser.add_argument("--recognition-interval", type=int, default=3,
                         help="Run location recognition every N cycles (default 3)")
+    parser.add_argument("--no-classify", action="store_true",
+                        help="Disable YOLO obstacle classification (generic alerts only)")
     args = parser.parse_args()
 
     cfg = load_config()
@@ -65,6 +68,7 @@ def main() -> None:
     obs_cfg = cfg["obstacle"]
     loc_cfg = cfg["localization"]
     aud_cfg = cfg["audio"]
+    perception_cfg = cfg["perception"]
 
     obstacle_threshold = args.obstacle_threshold or obs_cfg["alert_threshold_m"]
 
@@ -90,6 +94,17 @@ def main() -> None:
         zone_fraction=obs_cfg["detection_zone_fraction"],
     )
 
+    object_classifier = None
+    if not args.no_classify:
+        object_classifier = ObjectClassifier(
+            model_path=perception_cfg["yolo_model_path"],
+            confidence_threshold=perception_cfg["confidence_threshold"],
+        )
+        if object_classifier.is_available:
+            logger.info("YOLO object classification enabled")
+        else:
+            logger.warning("YOLO unavailable — falling back to generic obstacle alerts")
+
     with EnvironmentMap(args.env, environments_dir=cfg["data"]["environments_dir"]) as env:
         locations = env.list_waypoints()
         if not locations:
@@ -113,6 +128,7 @@ def main() -> None:
             recognizer=recognizer,
             obstacle_detector=obstacle_detector,
             audio=audio,
+            object_classifier=object_classifier,
             recognition_every_n=args.recognition_interval,
             location_cooldown_s=args.location_cooldown,
         )

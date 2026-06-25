@@ -24,6 +24,10 @@ pygame>=2.5.0
 vosk>=0.3.45
 sounddevice>=0.4.6
 
+# Deep learning obstacle classification (YOLOv8-nano, COCO-pretrained)
+# Note: pulls in torch/torchvision — large download, slow first-run on RPi4
+ultralytics>=8.1.0
+
 # Arducam ToF SDK — install manually from source on RPi:
 # https://github.com/ArduCAM/Arducam_tof_camera
 # The pip package name on PyPI is: ArducamDepthCamera

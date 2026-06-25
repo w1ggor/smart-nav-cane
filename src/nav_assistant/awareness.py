@@ -18,6 +18,7 @@ from typing import Optional
 from nav_assistant.audio.guidance import AudioGuidance
 from nav_assistant.localization.place_recognizer import PlaceRecognizer, RecognitionResult
 from nav_assistant.obstacle.detector import ObstacleDetector
+from nav_assistant.perception.object_detector import ObjectClassifier
 from nav_assistant.sensors.tof import ToFSensor
 from nav_assistant.sensors.webcam import WebcamSensor
 
@@ -34,6 +35,11 @@ class AwarenessSystem:
         recognizer: Loaded PlaceRecognizer instance.
         obstacle_detector: ObstacleDetector instance.
         audio: Initialized AudioGuidance instance.
+        object_classifier: Optional ObjectClassifier (YOLOv8-nano). When
+            provided and available, obstacle alerts are enriched with the
+            classified object name (e.g. "Chair ahead") instead of a
+            generic message. Runs only when an obstacle is already flagged
+            by the cheap ToF threshold, not every cycle.
         loop_hz: Target loop frequency in Hz (default 2).
         recognition_every_n: Run ORB recognition every N cycles (default 3).
             At 2 Hz this means recognition every ~1.5 seconds.
@@ -48,6 +54,7 @@ class AwarenessSystem:
         recognizer: PlaceRecognizer,
         obstacle_detector: ObstacleDetector,
         audio: AudioGuidance,
+        object_classifier: Optional[ObjectClassifier] = None,
         loop_hz: float = 2.0,
         recognition_every_n: int = 3,
         location_cooldown_s: float = 30.0,
@@ -57,6 +64,7 @@ class AwarenessSystem:
         self._recognizer = recognizer
         self._obstacle_detector = obstacle_detector
         self._audio = audio
+        self._object_classifier = object_classifier
         self._loop_period = 1.0 / loop_hz
         self._recognition_every_n = recognition_every_n
         self._location_cooldown = location_cooldown_s
@@ -107,6 +115,15 @@ class AwarenessSystem:
             alert = self._obstacle_detector.check(tof_frame)
             if alert:
                 message = self._obstacle_detector.alert_message(alert)
+
+                if self._object_classifier is not None and self._object_classifier.is_available:
+                    bgr = self._webcam.read_bgr()
+                    detection = self._object_classifier.classify(bgr)
+                    if detection:
+                        message = f"{detection.label.capitalize()} ahead, {alert.min_depth:.1f} metres."
+                        logger.info("Obstacle classified: %s (conf=%.2f)",
+                                    detection.label, detection.confidence)
+
                 self._audio.alert(message)
         except Exception as exc:
             logger.warning("Obstacle check error: %s", exc)

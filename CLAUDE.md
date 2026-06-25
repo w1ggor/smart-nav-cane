@@ -86,6 +86,14 @@ This is combined with two ORB recognizers:
 - If min depth < alert_threshold_m → audio alert with distance
 - A cooldown prevents repeated alerts for the same obstacle
 
+### Obstacle Classification — YOLOv8-nano (the project's deep learning component)
+ORB and Vosk's acoustic model are the other two recognition techniques in this project; YOLOv8-nano is the explicit, visible **deep learning** component requested by the project guidelines.
+
+- A pretrained YOLOv8n model (COCO, 80 classes, ~6MB) classifies WHAT triggered a ToF obstacle alert — e.g. "Chair ahead, 0.8 metres" instead of a generic "Obstacle ahead"
+- **Why gated, not continuous:** running a CNN every cycle would be too slow for real-time use on RPi4 CPU. Instead the cheap ToF depth threshold (`ObstacleDetector`) runs every cycle as normal, and YOLO only runs on the webcam frame *after* an obstacle is already flagged — classifying what's already known to be close. This keeps the system real-time while still using a genuine DL model.
+- **Why not used for doors:** "door" is not a COCO class. Trained ORB landmarks (see Location Recognition) handle custom small-data classes that have no pretrained equivalent. YOLO and ORB are deliberately used where each is strongest.
+- Implemented in `src/nav_assistant/perception/object_detector.py`, wired into both `AwarenessSystem` and `navigate_voice.py`'s emergency obstacle check. Degrades gracefully (falls back to the generic alert message) if `ultralytics` isn't installed.
+
 ### Audio Strategy
 - Linux/RPi: `espeak-ng` called via subprocess (most reliable, no driver bugs)
 - Fallback: `pyttsx3` (macOS/Windows only)
@@ -121,6 +129,8 @@ src/nav_assistant/
 │   └── recognizer.py         # VoiceRecognizer: offline Vosk STT for destination input
 ├── obstacle/
 │   └── detector.py           # ToF depth threshold → ObstacleAlert
+├── perception/
+│   └── object_detector.py    # ObjectClassifier: YOLOv8-nano, classifies flagged obstacles (the DL component)
 ├── audio/
 │   └── guidance.py           # TTS (espeak-ng) + obstacle beep
 └── awareness.py              # AwarenessSystem: simple awareness-mode loop coordinator
@@ -242,6 +252,8 @@ Edges between locations are stored in SQLite but are **not used** by the current
 - Tune `clear_distance_m`, `landmark_distance_m`, `emergency_threshold_m` for the real test route
 - Download and verify the Vosk model on the Raspberry Pi (not yet tested on ARM)
 - Confirm Bluetooth headset microphone is usable as the default audio input device
+- Benchmark YOLOv8n inference time on RPi4 CPU (ultralytics not yet installed/tested on ARM)
+- Confirm `ultralytics` + `torch` install successfully on RPi OS Bookworm (known to be a heavy dependency)
 
 ---
 
