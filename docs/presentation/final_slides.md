@@ -298,9 +298,7 @@ No map, no odometry → the system has **no concept of "on" or "off" route**, on
 <!-- 9: Hardware Photo -->
 ## Hardware — Assembled Prototype
 
-<div style="display:flex;justify-content:center;align-items:center;height:calc(100% - 70px);">
-  <img src="../photos/hardwarePhoto.jpg" style="height:470px;object-fit:contain;" />
-</div>
+<img src="../photos/hardwarePhoto2_padded.png" style="height:470px;" />
 
 ---
 
