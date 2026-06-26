@@ -280,6 +280,21 @@ Combined with: **arrival detection** (ORB match vs. destination) and **landmark 
 
 ---
 
+<!-- 8b: Path Deviation -->
+## What If the User Deviates From the Route?
+
+No map, no odometry → the system has **no concept of "on" or "off" route**, only reacts to what it currently sees.
+
+| Behavior | Result |
+|---|---|
+| Obstacle avoidance | ✅ Keeps working — purely reactive to live ToF |
+| Arrival / landmark detection | ⚠️ Can silently fail if the viewpoint differs too much from training |
+| Recovery / "you seem lost" | ❌ Not implemented — gives wall-following forever, no replanning |
+
+> This is exactly *why* lighting and viewpoint robustness matters — measured next.
+
+---
+
 <!-- 9: Hardware Photo -->
 ## Hardware — Assembled Prototype
 
@@ -352,6 +367,35 @@ Total hardware cost: **~€80** — no GPU, no cloud, no internet required.
 **Why gated, not continuous?** Running a CNN every cycle is too slow for real-time RPi4 CPU. YOLO only runs *after* the cheap ToF threshold already flagged something close — classifying what's already known to be near.
 
 **Why not YOLO for doors?** "Door" isn't a COCO class — ORB landmarks fill that gap with zero labeled data.
+
+---
+
+<!-- 12b: Dataset Sources & Accuracy -->
+## Dataset Sources & Accuracy
+
+| Technique | Dataset source | Published accuracy |
+|---|---|---|
+| ORB | **None** — self-collected from the user's own space (2-min capture) | N/A (not a learned model) |
+| YOLOv8-nano | **COCO** — 80 classes, ~330K images, ~1.5M instances | mAP₅₀₋₉₅ = 37.3 (COCO val2017, Ultralytics) |
+| Vosk | Public English speech corpora (Alphacephei) | WER 9.85% (LibriSpeech test-clean) |
+
+**Our own validation:** since the Pi was unavailable for re-testing, we ran a controlled ORB robustness test using the *exact production matching code* on synthetic image perturbations (next slide).
+
+---
+
+<!-- 12c: ORB Robustness Results -->
+## ORB Robustness — Real Test Results
+
+Same algorithm as production (`place_recognizer.py`): 500 ORB features, Lowe's ratio 0.75, `min_good_matches=15`.
+
+| Perturbation | Outcome |
+|---|---|
+| Rotation 0°–90° | Never failed — stayed above 375/500 good matches |
+| Gaussian blur (motion) | Failed at kernel ≥ 15 (144 → 79 good matches) |
+| Darker lighting | Failed at −40 brightness and below (133 → 27 matches) |
+| Brighter lighting | Never failed — stayed ≥ 400 matches |
+
+> Rotation alone underestimates real viewpoint change (no perspective distortion modeled). **Blur and darkening are the more realistic failure modes** — directly explains the deviation risk from the previous slide.
 
 ---
 
@@ -431,13 +475,13 @@ Pure decision logic — directly unit-testable without hardware.
 <!-- 17: Challenges & Solutions -->
 ## Challenges & Solutions
 
-| Challenge | Solution |
-|---|---|
-| USB webcam index unstable across reboots | Auto-detect by V4L2 device name |
-| Arducam SDK API differed from docs (`DeviceType` vs `FrameType`) | Read official Python examples directly |
-| `pyttsx3` crashed on Python 3.13 + espeak-ng | Call `espeak-ng` directly via subprocess |
-| Single training frame too fragile for ORB | 2-minute continuous capture session |
-| Running DL every cycle too slow for RPi CPU | Gate YOLO behind the cheap ToF threshold |
+**1. Full SLAM was infeasible** — no IMU, no odometry, CPU-only Pi. We treated this as a scope decision, not a failure: redesigned around reactive wall-following + ORB recognition, kept SLAM as documented future work.
+
+**2. Training data evolved through 3 iterations** — single frame (unreliable) → 5-frame burst (still too similar) → 2-minute continuous capture, ~40 frames, up to 5000 descriptors (final).
+
+**3. Cross-platform threading bug, found *this week*** — building a desktop demo without the Pi revealed `pyttsx3` hangs when one engine is shared across threads on Windows (COM apartment threading). Fixed with a fresh engine per call.
+
+**4. DL inference too slow for continuous use** — gated YOLO behind the cheap ToF threshold, paying CNN cost only when an obstacle is already confirmed.
 
 ---
 

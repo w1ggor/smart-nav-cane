@@ -1,0 +1,140 @@
+{
+  "rotation": [
+    {
+      "angle": 0,
+      "good_matches": 500,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 5,
+      "good_matches": 375,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 10,
+      "good_matches": 396,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 15,
+      "good_matches": 386,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 20,
+      "good_matches": 390,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 30,
+      "good_matches": 395,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 45,
+      "good_matches": 394,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 60,
+      "good_matches": 382,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "angle": 90,
+      "good_matches": 447,
+      "confidence": 1.0,
+      "recognized": true
+    }
+  ],
+  "blur": [
+    {
+      "kernel": 0,
+      "good_matches": 500,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "kernel": 3,
+      "good_matches": 424,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "kernel": 5,
+      "good_matches": 386,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "kernel": 9,
+      "good_matches": 278,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "kernel": 15,
+      "good_matches": 144,
+      "confidence": 0.576,
+      "recognized": false
+    },
+    {
+      "kernel": 21,
+      "good_matches": 79,
+      "confidence": 0.316,
+      "recognized": false
+    }
+  ],
+  "brightness": [
+    {
+      "delta": 0,
+      "good_matches": 500,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "delta": -60,
+      "good_matches": 27,
+      "confidence": 0.108,
+      "recognized": false
+    },
+    {
+      "delta": -40,
+      "good_matches": 133,
+      "confidence": 0.532,
+      "recognized": false
+    },
+    {
+      "delta": -20,
+      "good_matches": 370,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "delta": 20,
+      "good_matches": 476,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "delta": 40,
+      "good_matches": 437,
+      "confidence": 1.0,
+      "recognized": true
+    },
+    {
+      "delta": 60,
+      "good_matches": 400,
+      "confidence": 1.0,
+      "recognized": true
+    }
+  ]
+}

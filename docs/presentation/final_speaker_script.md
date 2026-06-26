@@ -1,6 +1,6 @@
 # Speaker Script — Final Presentation
 **Smart Cane Environmental Awareness System · Max 10 minutes including Q&A**
-**Target: ~7 minutes talk, leaving 3 minutes for Q&A**
+**Target: ~7.5 minutes talk, leaving ~2.5 minutes for Q&A**
 
 ---
 
@@ -12,7 +12,7 @@ Good morning. We are Igor Xavier and Fang Jialuo, and this is our final presenta
 
 ## Slide 2 — Outline
 
-Here's what we'll cover: the motivation, our project idea and how the scope evolved, the system architecture, hardware and software, the AI and deep learning components, our results, the challenges we solved, and future work. Then we're happy to take questions.
+Here's what we'll cover: the motivation, our project idea and how the scope evolved, the system architecture, hardware and software, the AI and deep learning components and their accuracy, our results, the challenges we solved, and future work.
 
 ---
 
@@ -48,75 +48,97 @@ Our first operating mode is passive awareness — no destination, just continuou
 
 ## Slide 8 — Guided Navigation Mode
 
-Our second mode is guided navigation. Since we have no IMU and no wheel odometry, we cannot plan a path to arbitrary coordinates the way SLAM would. Instead we use reactive wall-following: we split the ToF depth frame into left, center, and right zones every cycle. If the center is clear, we say go straight; if it's blocked, we turn toward whichever side has more clearance. We combine this with arrival detection — matching the live view against the destination — and landmark announcements for things like trained doors. This works reliably for a route the system has walked before.
+Our second mode is guided navigation. Since we have no IMU and no wheel odometry, we cannot plan a path to arbitrary coordinates the way SLAM would. Instead we use reactive wall-following: we split the ToF depth frame into left, center, and right zones every cycle. If the center is clear, we say go straight; if it's blocked, we turn toward whichever side has more clearance. We combine this with arrival detection and landmark announcements. This works reliably for a route the system has walked before.
 
 ---
 
-## Slide 9 — Hardware Photo
+## Slide 9 — What If the User Deviates?
+
+This is an important honesty point, and we want to address it directly rather than wait for the question. Because we have no map and no odometry, the system has no concept of being "on" or "off" the trained route — it only reacts to what it currently sees. Obstacle avoidance keeps working perfectly regardless, since that's purely reactive. But arrival detection and landmark recognition depend on visual matching, and can silently fail if the viewpoint differs too much from training. And critically, we have no recovery behavior — no "you seem lost" message. It will just keep giving wall-following instructions. This limitation is exactly why we measured visual robustness directly, which we'll show in a moment.
+
+---
+
+## Slide 10 — Hardware Photo
 
 This is our assembled prototype — the Raspberry Pi, the Arducam ToF camera on the CSI port, and the USB webcam, all mounted on the cane.
 
 ---
 
-## Slide 10 — Hardware Components
+## Slide 11 — Hardware Components
 
-Four components: the Raspberry Pi 4 for compute, the Arducam ToF camera for depth up to 4 metres, the Logitech C270 webcam for both recognition and YOLO classification, and Bluetooth headphones for audio in and out. Total hardware cost is around 80 euros — no GPU, no cloud, no internet connection required anywhere in the pipeline.
+Four components: the Raspberry Pi 4 for compute, the Arducam ToF camera for depth up to 4 metres, the Logitech C270 webcam for both recognition and YOLO classification, and Bluetooth headphones for audio in and out. Total hardware cost is around 80 euros.
 
 ---
 
-## Slide 11 — Software Architecture
+## Slide 12 — Software Architecture
 
 Our codebase is organized into eight modules by concern. I want to highlight two in particular: perception, which wraps our YOLO model, and speech, which wraps Vosk — these are our two deep learning components. Everything is backed by 27 automated unit tests.
 
 ---
 
-## Slide 12 — AI / Deep Learning Components
+## Slide 13 — AI / Deep Learning Components
 
-This is the core of our technical contribution. We use three different recognition techniques, each chosen deliberately for where it performs best. ORB is classical computer vision — no neural network — used for place and landmark recognition because it needs only a two-minute capture session and no labeled data. YOLOv8-nano is a real convolutional neural network, pretrained on COCO, used to classify obstacles. And Vosk uses a deep neural network acoustic model for fully offline speech recognition.
+This is the core of our technical contribution. We use three different recognition techniques, each chosen deliberately for where it performs best. ORB is classical computer vision — used for place and landmark recognition because it needs only a two-minute capture session and no labeled data. YOLOv8-nano is a real convolutional neural network, pretrained on COCO, used to classify obstacles. And Vosk uses a deep neural network acoustic model for fully offline speech recognition.
 
-Two design decisions are worth explaining clearly, because we expect questions on this: first, we gate YOLO behind the cheap ToF threshold rather than running it every cycle, because a CNN running continuously would be too slow for a Raspberry Pi 4 CPU with no GPU. Second, we still use ORB for doors instead of YOLO, simply because "door" is not a class in the COCO dataset YOLO was trained on.
-
----
-
-## Slide 13 — Code: Gated DL Inference
-
-Here's the actual classify function from our object detector. Notice it returns early in three cases — if the classifier isn't available, if YOLO finds no objects at all, or if the best detection's confidence is below our threshold. Only if none of those apply do we return a real label like "chair" with its confidence score.
+Two design decisions are worth explaining clearly: we gate YOLO behind the cheap ToF threshold because a CNN running continuously would be too slow for a Raspberry Pi 4 CPU with no GPU. And we still use ORB for doors instead of YOLO, because "door" is not a class in the COCO dataset YOLO was trained on.
 
 ---
 
-## Slide 14 — Code: Wall-Following Decision
+## Slide 14 — Dataset Sources & Accuracy
 
-And here's the decision logic for navigation. It's a pure function: given three numbers — left, center, and right depth — it returns one of four outcomes: go straight, turn left, turn right, or stop because the path is blocked. Because it's pure logic with no hardware dependency, we can unit test it directly without needing the actual sensors.
+Since the professor specifically asked us to be explicit about this: our three AI components have fundamentally different relationships to data. ORB uses no external dataset at all — every descriptor comes from the user's own two-minute capture session in their own home. YOLOv8-nano is pretrained on COCO, a public dataset of about 330,000 images and 80 object categories, and its published accuracy is a mean average precision of 37.3 on the COCO validation set. Vosk's small English model is trained on public speech corpora, with a published word error rate of 9.85 percent on LibriSpeech.
+
+We want to be upfront about one limitation: the Raspberry Pi we developed on was not available to us during this final submission period, so we could not re-measure end-to-end accuracy on the deployed hardware. For the pretrained models, we report their official published benchmarks rather than inventing new numbers. For our own ORB component, we did something better than guessing — we ran a real, controlled test, which is the next slide.
 
 ---
 
-## Slide 15 — Results & Status
+## Slide 15 — ORB Robustness — Real Test Results
+
+We took the exact production matching code — the same 500 ORB features, the same Lowe's ratio test, the same thresholds used in the deployed system — and tested it against synthetic perturbations of a real photo: rotation, blur, and brightness changes. Rotation alone never broke recognition, ORB is naturally rotation-invariant by design. But Gaussian blur, simulating motion while walking, caused recognition to fail once the blur got heavy. And darker lighting caused failure even faster — at minus 40 brightness, good matches dropped from 500 to 133, well below our threshold.
+
+We want to be precise about what this does and doesn't prove: rotating an image in 2D is not the same as a real 3D viewpoint change, which also introduces perspective distortion we didn't model here. So this likely *overestimates* robustness to camera angle. But the blur and lighting results are directly informative, and they explain exactly why path deviation is risky — it's less about the angle you approach from and more about motion blur and lighting changes.
+
+---
+
+## Slide 16 — Code: Gated DL Inference
+
+Here's the actual classify function from our object detector. It returns early in three cases — if the classifier isn't available, if YOLO finds no objects at all, or if the best detection's confidence is below threshold. Only then do we return a real label with its confidence score.
+
+---
+
+## Slide 17 — Code: Wall-Following Decision
+
+And here's the decision logic for navigation. It's a pure function: given left, center, and right depth, it returns go straight, turn left, turn right, or stop. Because it's pure logic, we can unit test it directly without needing the actual sensors.
+
+---
+
+## Slide 18 — Results & Status
 
 In terms of status: sensor integration, location training, and the awareness loop are all complete and validated on real hardware. Guided navigation and YOLO obstacle classification are implemented and unit tested. All 27 of our automated tests pass.
 
 ---
 
-## Slide 16 — Contributions
+## Slide 19 — Contributions
 
-To summarize our contributions: a working, fully offline assistive prototype combining depth sensing, classical computer vision, and two deep learning models on a single Raspberry Pi 4; a deliberate architecture that pairs ORB, YOLO, and Vosk rather than defaulting to one technique; a hardware layer that automatically detects camera devices by name, solving a real instability we hit during development; and 27 automated tests.
-
----
-
-## Slide 17 — Challenges & Solutions
-
-We want to be transparent about the real engineering problems we solved. Our USB webcam's device index wasn't stable across reboots, so we built automatic detection by device name. The Arducam SDK's actual API didn't match its documentation, so we had to read the official examples directly to find the right function calls. Python's text-to-speech library crashed on our system, so we now call espeak-ng directly. A single training frame per location was too fragile for reliable recognition, so we built a two-minute continuous capture session. And running deep learning every cycle was too slow, so we gated it behind the cheap depth check.
+To summarize: a working, fully offline assistive prototype combining depth sensing, classical computer vision, and two deep learning models on a single Raspberry Pi 4; a deliberate architecture that pairs ORB, YOLO, and Vosk rather than defaulting to one technique; explicit dataset sourcing and a real robustness measurement rather than an unverified accuracy claim; and 27 automated tests.
 
 ---
 
-## Slide 18 — Future Work
+## Slide 20 — Challenges & Solutions
 
-Looking ahead, the features we deliberately deferred from our original vision: Visual SLAM for real-time 3D mapping and navigation to unseen destinations; graph-based route planning — our data model already stores the edges needed for this; IMU integration for dead-reckoning; fine-tuning a custom object detector for assistive-specific classes like doors and stairs; and multi-environment support.
+Four challenges shaped this project the most. First, full SLAM was infeasible without an IMU or odometry — we treated that as a scope decision, not a failure, and redesigned around reactive navigation while keeping SLAM as documented future work. Second, our training data approach evolved through three iterations — a single frame was unreliable, a five-frame burst barely helped because the frames were too similar, and we landed on a two-minute continuous capture that actually works. Third — and this one is very recent — building a demo this week without the Raspberry Pi, we discovered a real cross-platform threading bug: our Windows text-to-speech fallback hangs when one engine is shared across threads, because of how Windows COM threading works. We fixed it by creating a fresh engine per call. Fourth, running deep learning every cycle was too slow, so we gated YOLO behind the cheap depth check.
 
 ---
 
-## Slide 19 — Thank You
+## Slide 21 — Future Work
 
-That's our project. The full code, including everything we just showed, is open source on GitHub. Thank you — we're ready for your questions.
+Looking ahead: Visual SLAM for real-time 3D mapping and navigation to unseen destinations; graph-based route planning, since our data model already stores the edges needed for this; IMU integration for dead-reckoning; fine-tuning a custom object detector for assistive-specific classes like doors and stairs; and multi-environment support.
+
+---
+
+## Slide 22 — Thank You
+
+That's our project. The full code is open source on GitHub. Thank you — we're ready for your questions.
 
 ---
 
@@ -125,17 +147,20 @@ That's our project. The full code, including everything we just showed, is open 
 **Q: Why didn't you implement full SLAM as originally planned?**
 A: SLAM needs accurate odometry — typically from an IMU or wheel encoders — to track motion between frames. We have neither. Attempting SLAM without that would produce an unreliable map, which is worse than not having one. We made an explicit, documented trade-off toward a system we could make reliable in the time available.
 
+**Q: What is the accuracy of your system?**
+A: We're precise about what we can and can't claim. The two pretrained deep learning models have official published benchmarks — YOLOv8-nano at 37.3 mAP on COCO, Vosk's small model at 9.85% word error rate on LibriSpeech — which we report rather than re-deriving without the original test data. For our own ORB recognition component, we ran a controlled robustness test using the exact production code on synthetic image perturbations: it tolerates rotation well, but fails under heavy motion blur or darker lighting. We don't have a single end-to-end accuracy percentage for the full deployed system, because the Raspberry Pi wasn't available to us during this final phase — and we'd rather say that clearly than state a number we didn't actually measure.
+
+**Q: What's the source of your training/test data?**
+A: Three different sources, by design. ORB uses no external dataset — it's entirely self-collected by the user in their own environment, a two-minute walk-around capture with no labeling needed. YOLOv8-nano uses Microsoft's COCO dataset, a public benchmark with about 330,000 images and 80 object categories — we use the pretrained weights as released, no fine-tuning. Vosk's model is trained by its maintainers on public English speech corpora, also used as released.
+
+**Q: What happens if the user deviates from the trained path, or something in the environment changes?**
+A: Obstacle avoidance is unaffected — it's purely reactive to whatever the depth sensor sees right now, so it keeps working regardless of route. But arrival and landmark detection depend on ORB matching the live view against training data, and our robustness test shows that's more sensitive to lighting changes and motion blur than to viewpoint angle. If recognition confidence drops too far, the system doesn't detect that it's "lost" — there's no recovery behavior yet. It will just continue giving wall-following guidance. That's an honest limitation we've documented rather than hidden.
+
 **Q: Why use YOLO if it's slow on a Raspberry Pi?**
-A: We don't run it continuously — that's the whole point of gating it behind the ToF threshold. The cheap depth check (no neural network, near-instant) runs every cycle. YOLO only runs on the rare cycles where an obstacle is already confirmed close, so the inference cost is paid only when it matters.
+A: We don't run it continuously. The cheap depth check runs every cycle; YOLO only runs on the rare cycles where an obstacle is already confirmed close, so the inference cost is paid only when it matters.
 
 **Q: Could you train YOLO to recognize doors directly?**
-A: Yes, that's listed explicitly in our future work. It would require collecting and labeling a custom dataset of door images, which wasn't feasible in our timeline. ORB landmarks solve the same problem today with a two-minute capture session and zero labeling.
-
-**Q: How accurate is the ORB place recognition?**
-A: It depends on descriptor count and lighting consistency. We aim for 1000–5000 descriptors per location from a 2-minute walk-around capture. It's not as robust as a learned embedding model would be, but it requires zero training data, which matters for a system end-users would train themselves in their own home.
-
-**Q: What happens if the voice recognition fails?**
-A: The system falls back gracefully — if Vosk isn't available or doesn't understand, the script supports a `--destination` flag to bypass voice entirely, and at runtime it asks the user to try again rather than crashing.
+A: Yes, that's in our future work. It would require collecting and labeling a custom dataset of door images, which wasn't feasible in our timeline. ORB landmarks solve the same problem today with a two-minute capture and zero labeling.
 
 **Q: Is this safe for real-world use today?**
-A: Not yet without further field testing — our wall-following logic was tuned and tested on a specific known route, not validated across many environments. We're transparent about that limitation in the report.
+A: Not yet without further field testing on the actual hardware, which we no longer have access to. Our wall-following logic and the ORB robustness numbers were derived from a desktop validation, not a deployed field test. We're transparent about that gap in both the report and here.

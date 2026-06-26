@@ -240,6 +240,17 @@ Without an IMU or wheel odometry, the system cannot plan a path to arbitrary coo
 
 This is combined with two independently loaded ORB recognizers: a \emph{location} recognizer (checks for arrival at the destination) and a \emph{landmark} recognizer (announces trained features such as doors when they are recognized close ahead). This approach works reliably for a previously walked, fixed route — a deliberate, honest trade-off documented further in Section~\ref{sec:future}.
 
+\subsection{Behavior Under Path Deviation}
+\label{sec:deviation}
+A natural question is what happens if the user does not follow the exact trained route. Because the system has no map and no odometry, it has, by design, no concept of being ``on'' or ``off'' a route — it only reacts to whatever the sensors currently see. This has two concrete consequences:
+
+\begin{enumerate}[leftmargin=1.4cm]
+  \item \textbf{Obstacle avoidance keeps working.} The wall-following logic (Listing~\ref{lst:wall}) operates purely on the live ToF depth zones, so it continues to give locally correct ``go straight'' / ``turn'' guidance regardless of whether the user is on the trained path. Safety-relevant behavior degrades gracefully.
+  \item \textbf{Arrival and landmark recognition can silently fail.} Both depend on ORB matching the live webcam view against descriptors captured at training time. If the user's viewpoint differs enough from training — a different angle, distance, or lighting — recognition confidence can drop below threshold and the destination will not be detected as reached, with no error reported; the system simply keeps giving wall-following instructions indefinitely. There is no ``you appear to be lost'' fallback in the current version.
+\end{enumerate}
+
+Section~\ref{sec:accuracy} quantifies how much viewpoint and lighting change ORB recognition can tolerate before this failure mode occurs, using a controlled desktop test.
+
 \subsection{Voice Destination Input}
 At the start of guided navigation, the system asks \textit{``Where do you want to go?''} and transcribes the spoken response locally using Vosk, an offline speech-to-text engine. The transcribed text is matched against the labels of previously trained locations. No audio leaves the device — this preserves the project's fully-offline design goal even for voice interaction.
 
@@ -303,6 +314,32 @@ The project guidelines require an explicit AI (ML/DL) component. Three recogniti
   \item \textbf{YOLOv8-nano} (convolutional neural network, deep learning) — a pretrained, COCO-trained object detector (80 classes, $\sim$6MB) used to classify what triggered a ToF obstacle alert (e.g. ``chair'', ``person''), turning a generic alert into a specific one.
   \item \textbf{Vosk speech recognition} (deep neural network acoustic model) — used for fully offline voice destination input, with no cloud speech API involved.
 \end{enumerate}
+
+\subsubsection{Dataset Sources}
+\label{sec:datasets}
+Each technique has a fundamentally different relationship to training data, summarized in Table~\ref{tab:datasets}.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{Technique} & \textbf{Dataset source} \\
+\midrule
+ORB feature matching & \textbf{No external dataset.} Descriptors come entirely from the user's own environment, captured at runtime via the 2-minute training session (Table~\ref{tab:cv-vs-dl}; implemented in \texttt{mapping/recorder.py}). Nothing is pretrained; nothing is shared between deployments. \\
+YOLOv8-nano & \textbf{Microsoft COCO} (Common Objects in Context) — a public benchmark dataset of $\sim$330{,}000 images covering 80 object categories and $\sim$1.5 million labeled object instances. We use the publicly released, COCO-pretrained weights (\texttt{yolov8n.pt}) as distributed by Ultralytics, with no project-specific fine-tuning. \\
+Vosk speech recognizer & \texttt{vosk-model-small-en-us-0.15} (40MB), a publicly released English acoustic and language model distributed by Alphacephei, the Vosk maintainers, trained on public English speech corpora. We use the released model directly, with no project-specific fine-tuning or additional training data. \\
+\bottomrule
+\end{tabularx}
+\caption{Dataset source for each AI/ML component used in the project.}
+\label{tab:datasets}
+\end{table}
+
+\noindent Published accuracy benchmarks for the two pretrained models, as reported by their respective maintainers (not independently re-measured by us, since this would require either the original held-out test sets or hardware we no longer have access to):
+
+\begin{itemize}[leftmargin=1.4cm]
+  \item \textbf{YOLOv8-nano}: mAP\textsubscript{50-95} = 37.3 on the COCO \texttt{val2017} benchmark, 3.2M parameters (Ultralytics official model documentation).
+  \item \textbf{Vosk small English model}: word error rate (WER) of 9.85\% on LibriSpeech \texttt{test-clean} and 10.38\% on TEDLIUM (Vosk official model page).
+\end{itemize}
 
 \subsubsection{Why YOLO Inference Is Gated, Not Continuous}
 Running a CNN on every frame would be too slow for real-time use on a Raspberry Pi 4 CPU (no GPU). The architecture instead gates the deep learning inference behind the cheap ToF depth threshold: \texttt{ObstacleDetector} runs every cycle as before, and YOLOv8-nano only runs on the corresponding webcam frame \emph{after} an obstacle has already been flagged. This keeps the system real-time while still using a genuine deep learning model for recognition, illustrated in Listing~\ref{lst:yolo}.
@@ -425,6 +462,34 @@ DL obstacle classification & Implemented & YOLOv8-nano integrated, gated behind 
 \caption{Project status by phase.}
 \end{table}
 
+\subsection{Accuracy \& Robustness Validation}
+\label{sec:accuracy}
+The Raspberry Pi hardware used during development was not available at submission time, so end-to-end accuracy could not be re-measured on the deployed platform. Two complementary, honestly-scoped sources of evidence are used instead.
+
+\subsubsection{Pretrained Model Benchmarks (YOLOv8-nano, Vosk)}
+For the two deep learning components, we report the official published benchmarks from each model's maintainer (Section~\ref{sec:datasets}) rather than re-deriving new numbers without the original test sets: YOLOv8-nano reaches mAP\textsubscript{50-95} = 37.3 on COCO \texttt{val2017}; the Vosk small English model reaches a 9.85\% word error rate on LibriSpeech \texttt{test-clean}. Both are pretrained, unmodified, publicly verifiable figures.
+
+\subsubsection{Controlled ORB Robustness Test (This Work)}
+For the project's own classical-CV component, we ran a controlled desktop test: one reference photograph stands in for a ``trained location,'' and the exact production matching code (\texttt{place\_recognizer.py} — ORB with 500 features, BFMatcher, Lowe's ratio 0.75, \texttt{min\_good\_matches}=15, \texttt{confidence\_threshold}=0.6) is used to match synthetically perturbed versions of that photo against the original. This characterizes ORB's sensitivity to the same kinds of change a user introduces by viewing a location from a different angle, while moving, or under different lighting — directly relevant to the path-deviation discussion in Section~\ref{sec:deviation}. It is a single-image desktop validation, not a statistically representative field accuracy figure for the deployed system. The test script and raw results are included in the project repository at \texttt{docs/report/validation/} for reproducibility.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+\textbf{Perturbation} & \textbf{Result} & \textbf{Recognition threshold crossed} \\
+\midrule
+In-plane rotation (0\textdegree--90\textdegree) & Good matches stayed above 375/500 at every angle tested & Never failed — ORB's built-in rotation invariance held \\
+Gaussian blur (simulating motion blur) & Good matches fell from 500 (none) to 144 (heavy blur, kernel 15) to 79 (kernel 21) & Failed (confidence $<$ 0.6) at kernel $\geq$ 15 \\
+Brightness decrease (darker) & Good matches fell from 500 (unchanged) to 133 ($-$40) to 27 ($-$60) & Failed at $-$40 and below \\
+Brightness increase (brighter) & Good matches remained $\geq$ 400 across all levels tested ($+$20 to $+$60) & Never failed \\
+\bottomrule
+\end{tabularx}
+\caption{ORB recognition robustness under synthetic perturbations of a single reference image, using the exact production matching parameters.}
+\label{tab:orb-robustness}
+\end{table}
+
+\noindent \textbf{Interpretation.} In-plane rotation alone is not a faithful proxy for the 3D viewpoint change a user introduces by approaching a location from a different angle (real viewpoint change also introduces perspective distortion, which this test does not capture) — so the true robustness to walking a different path is likely \emph{lower} than the rotation row suggests. The blur and darkening results, however, are directly informative: they indicate degraded lighting or fast head/cane movement is more likely to cause a missed recognition than camera angle alone, which directly explains the failure mode described in Section~\ref{sec:deviation}.
+
 \subsection{Contributions}
 \begin{itemize}[leftmargin=1.4cm]
   \item A working, fully offline assistive prototype combining depth sensing, computer vision, and two deep learning models on a single Raspberry Pi 4.
@@ -434,23 +499,25 @@ DL obstacle classification & Implemented & YOLOv8-nano integrated, gated behind 
 \end{itemize}
 
 \subsection{Engineering Challenges}
-Table~\ref{tab:challenges} summarizes the most significant hardware/software integration problems encountered and resolved during development.
+This section focuses on the four challenges that most shaped the project's architecture and process, rather than a full bug list (several smaller hardware integration fixes are documented in the project's change history).
 
-\begin{table}[H]
-\centering
-\begin{tabularx}{\textwidth}{X X}
-\toprule
-\textbf{Challenge} & \textbf{Resolution} \\
-\midrule
-USB webcam device index unstable across reboots & Auto-detect by V4L2 device name at startup instead of a hardcoded index \\
-Arducam SDK API differed from documentation (\texttt{DeviceType} vs.\ \texttt{FrameType}) & Resolved by reading the official Python examples directly \\
-\texttt{pyttsx3} crashed on Python 3.13 with espeak-ng & Call \texttt{espeak-ng} directly via subprocess, bypassing the broken driver \\
-Single training frame per location was visually fragile & Two-minute continuous capture session, sampling every 3 seconds \\
-\bottomrule
-\end{tabularx}
-\caption{Key engineering challenges and their solutions.}
-\label{tab:challenges}
-\end{table}
+\subsubsection{Challenge 1: Full SLAM Was Infeasible — Redesigning Around It}
+The original project plan was full Visual SLAM (e.g. ORB-SLAM3): build a 3D map in real time and plan routes to arbitrary destinations. Partway into development it became clear this was not achievable with the available hardware and timeline — there is no IMU, no wheel odometry, and a single CPU-only Raspberry Pi 4, all of which SLAM implementations typically depend on for motion estimation between frames. Rather than attempting it anyway and shipping an unreliable map, we treated this as a scope decision, not a failure: the system was redesigned around two narrower but achievable modes — passive awareness and reactive wall-following guided navigation (Sections~\ref{sec:design}--\ref{sec:deviation}) — while keeping SLAM as an explicit, documented future-work item (Section~\ref{sec:future}) rather than silently dropping it.
+
+\subsubsection{Challenge 2: Training Data Evolved Through Three Iterations}
+Visual place recognition's reliability turned out to depend heavily on how training data was collected, which we only discovered by testing the simplest approach first:
+\begin{enumerate}[leftmargin=1.4cm]
+  \item \textit{Single frame.} The first implementation captured one webcam frame per location. Recognition was unreliable — a single viewpoint does not capture enough visual diversity for ORB to match later, naturally varying views.
+  \item \textit{Short burst.} Capturing 5 frames in quick succession improved things slightly, but frames taken within roughly a second of each other are still nearly the same viewpoint, so diversity barely improved.
+  \item \textit{Continuous two-minute capture (final).} The training tool now samples one frame every 3 seconds for 2 minutes while the user walks around the space, yielding $\sim$40 frames and up to 5{,}000 descriptors per location (randomly subsampled if more are collected, to bound matching cost). This is also the data source documented in Table~\ref{tab:datasets} for ORB's ``no external dataset'' design.
+\end{enumerate}
+This is a direct, practical illustration of why dataset \emph{construction methodology} matters as much as dataset \emph{size} for a classical CV technique with no learned generalization.
+
+\subsubsection{Challenge 3: A Thread-Safety Bug That Only Appeared on a Different Platform}
+While preparing this submission without access to the Raspberry Pi, we built a desktop demo tool (running on Windows) and discovered a real bug invisible on the original target platform: the \texttt{pyttsx3} text-to-speech fallback shares one engine instance between a background ``speak'' thread and the main thread's ``alert'' call. On Windows, \texttt{pyttsx3}'s SAPI5 driver is COM-based and apartment-threaded, meaning a single engine instance may only safely be called from the thread that created it — calling it from a second thread silently hangs with no exception. The fix creates a fresh, short-lived engine inside every call, scoped entirely to whichever thread is using it. This had no effect on the Raspberry Pi, which uses the \texttt{espeak-ng} subprocess backend instead (each call is an independent process, inherently thread-safe) — but would have caused a hard-to-diagnose hang for any future Windows or macOS deployment.
+
+\subsubsection{Challenge 4: Gating Deep Learning Inference Behind a Cheap Check}
+Running YOLOv8-nano on every frame would be too slow for real-time use on a CPU-only Raspberry Pi 4. The solution (Section~\ref{sec:ai}) runs the cheap ToF depth threshold every cycle as before, and only invokes the CNN on the webcam frame after an obstacle has already been flagged — paying the deep learning inference cost only when it is actually useful.
 
 % ===================================================================
 \section{Future Work}
