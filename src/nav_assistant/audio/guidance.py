@@ -40,6 +40,26 @@ _BACKEND = "espeak-ng" if _ESPEAK_BIN else ("pyttsx3" if _PYTTSX3_AVAILABLE else
 logger.debug("AudioGuidance backend: %s", _BACKEND)
 
 
+def _find_english_voice_id(engine) -> Optional[str]:
+    """
+    Return the id of the first English voice pyttsx3 reports, or None if
+    none is found (falls back to whatever the system default is).
+
+    Needed because pyttsx3/SAPI5 on Windows defaults to the OS locale
+    voice — e.g. a pt-BR system speaks Portuguese unless an English voice
+    is explicitly selected.
+    """
+    try:
+        for voice in engine.getProperty("voices"):
+            languages = [str(lang).lower() for lang in (getattr(voice, "languages", None) or [])]
+            name = (voice.name or "").lower()
+            if any("en" in lang for lang in languages) or "english" in name:
+                return voice.id
+    except Exception as exc:
+        logger.debug("Could not enumerate pyttsx3 voices: %s", exc)
+    return None
+
+
 class AudioGuidance:
     """
     Non-blocking audio guidance system.
@@ -68,7 +88,8 @@ class AudioGuidance:
         self._rate = rate
         self._volume = volume
         self._alert_sound_path = alert_sound_path
-        self._pyttsx3_engine: Optional[object] = None
+        self._pyttsx3_ok = False
+        self._pyttsx3_voice_id: Optional[str] = None
         self._lock = threading.Lock()
         self._speak_thread: Optional[threading.Thread] = None
 
@@ -77,14 +98,23 @@ class AudioGuidance:
         if _BACKEND == "espeak-ng":
             logger.info("TTS backend: espeak-ng (%s)", _ESPEAK_BIN)
         elif _BACKEND == "pyttsx3":
+            # Sanity-check that pyttsx3 actually initializes on this machine,
+            # but do NOT keep the engine instance around. pyttsx3's SAPI5
+            # driver on Windows uses COM, which is bound to the thread that
+            # created it — sharing one engine between speak()'s background
+            # thread and alert()'s caller thread causes silent hangs. Each
+            # _tts() call instead creates its own short-lived engine, scoped
+            # entirely to whichever thread is using it.
             try:
-                self._pyttsx3_engine = pyttsx3.init()
-                self._pyttsx3_engine.setProperty("rate", self._rate)
-                self._pyttsx3_engine.setProperty("volume", self._volume)
-                logger.info("TTS backend: pyttsx3")
+                probe = pyttsx3.init()
+                self._pyttsx3_voice_id = _find_english_voice_id(probe)
+                probe.stop()
+                self._pyttsx3_ok = True
+                logger.info("TTS backend: pyttsx3 (voice: %s)",
+                            self._pyttsx3_voice_id or "system default")
             except Exception as exc:
                 logger.warning("pyttsx3 init failed (%s); falling back to log-only", exc)
-                self._pyttsx3_engine = None
+                self._pyttsx3_ok = False
         else:
             logger.warning("No TTS backend available — speech output disabled")
 
@@ -118,12 +148,16 @@ class AudioGuidance:
         with self._lock:
             self._tts(text)
 
+    def wait_until_done(self, timeout: Optional[float] = None) -> None:
+        """
+        Block until the most recent speak() call's background thread finishes.
+        Useful for short-lived scripts that would otherwise exit (and kill
+        the daemon thread) before the speech finishes playing.
+        """
+        if self._speak_thread is not None and self._speak_thread.is_alive():
+            self._speak_thread.join(timeout=timeout)
+
     def shutdown(self) -> None:
-        if self._pyttsx3_engine is not None:
-            try:
-                self._pyttsx3_engine.stop()
-            except Exception:
-                pass
         if _PYGAME_AVAILABLE and pygame.mixer.get_init():
             pygame.mixer.quit()
 
@@ -143,10 +177,18 @@ class AudioGuidance:
             except Exception as exc:
                 logger.warning("espeak-ng failed: %s", exc)
 
-        elif _BACKEND == "pyttsx3" and self._pyttsx3_engine is not None:
+        elif _BACKEND == "pyttsx3" and self._pyttsx3_ok:
+            # A fresh engine per call, created and destroyed entirely within
+            # the calling thread — see the comment in initialize() for why.
             try:
-                self._pyttsx3_engine.say(text)
-                self._pyttsx3_engine.runAndWait()
+                engine = pyttsx3.init()
+                engine.setProperty("rate", self._rate)
+                engine.setProperty("volume", self._volume)
+                if self._pyttsx3_voice_id:
+                    engine.setProperty("voice", self._pyttsx3_voice_id)
+                engine.say(text)
+                engine.runAndWait()
+                engine.stop()
             except Exception as exc:
                 logger.warning("pyttsx3 speak failed: %s", exc)
 

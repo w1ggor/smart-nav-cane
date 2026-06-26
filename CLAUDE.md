@@ -139,6 +139,9 @@ scripts/
 ├── train.py                  # CLI: capture/append locations and landmarks
 ├── awareness.py               # Entry point: passive awareness mode
 ├── navigate_voice.py          # Entry point: guided navigation (voice + turn-by-turn)
+├── demo_voice.py               # No hardware/Pi required: speaks the exact phrases the
+│                               #   real system produces, for recording demo videos
+│                               #   without sensors (interactive menu, --say, --sequence)
 └── test_sensors.py            # Hardware validation
 ```
 
@@ -290,6 +293,11 @@ espeak-ng "Hello world"   # test
 ---
 
 ## Lessons Learned
+
+### pyttsx3/SAPI5 on Windows is not thread-safe across calls — and defaults to the OS locale voice
+Two related bugs surfaced when running `AudioGuidance` on Windows (used for demo recording without the Raspberry Pi):
+1. **Hang on second call from a different thread.** `speak()` runs on a background thread while `alert()` runs on the caller's thread. SAPI5 is COM-based and apartment-threaded — a single shared `pyttsx3` engine instance can only safely be called from the thread that created it. Calling it from a second thread silently hangs (no exception). Fix: create a **fresh `pyttsx3.init()` engine inside every `_tts()` call**, scoped entirely to whichever thread invokes it, instead of reusing one persistent instance.
+2. **Wrong language.** On a Windows machine with a non-English OS locale (e.g. pt-BR), SAPI5's default voice matches the locale ("Microsoft Maria" — Portuguese), not English, even though English voices (Zira, David) are installed. Fix: enumerate `engine.getProperty("voices")` once at `initialize()` time, pick the first voice whose `languages` or name contains "en"/"english", and explicitly `engine.setProperty("voice", ...)` on every created engine instance.
 
 ### USB Webcam is NOT /dev/video0 on RPi with CSI camera attached — and the index is not stable
 When the Arducam ToF is on the CSI port, `/dev/video0` is the CSI unicam device. The USB webcam index is not fixed across reboots. Fix: `WebcamSensor` now auto-detects the correct `/dev/videoX` index at `open()` time by parsing `v4l2-ctl --list-devices` and matching by device name (e.g. "C270 HD WEBCAM"). Falls back to `device_index` from config if detection fails. Set `webcam.device_name` in `config/default.yaml`.
