@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Guided navigation demo — voice destination input + turn-by-turn audio guidance.
+Guided navigation demo — voice destination input + planned-route guidance.
 
 Flow:
   1. "Where do you want to go?" — listens via Vosk, matches a trained location
-  2. Turn-by-turn guidance using ToF wall-following (no IMU/odometry; reacts
-     to the live depth frame — works for a known, previously walked route)
-  3. Trained "landmark" waypoints (e.g. doors) are announced when recognized
+  2. Localize the current position, then plan a route (RouteGraph/Dijkstra)
+     over trained WaypointEdges from here to the destination
+  3. Follow the route step by step (GuidedNavigator) — each "forward" step
+     is only taken if the ToF depth frame confirms it is actually clear;
+     turns are announced directly from the edge's direction hint
+  4. If no route exists (no trained edges, or starting position not
+     recognized), fall back to pure reactive wall-following
+  5. Trained "landmark" waypoints (e.g. doors) are announced when recognized
      close ahead
-  4. Arrival is detected when the current view matches the destination
+  6. Arrival is detected when the current view matches the destination
 
 Usage:
     python scripts/navigate_voice.py --env my_home
@@ -33,6 +38,7 @@ from nav_assistant.audio.guidance import AudioGuidance
 from nav_assistant.localization.place_recognizer import PlaceRecognizer
 from nav_assistant.mapping.environment import EnvironmentMap
 from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+from nav_assistant.navigation.route_graph import RouteGraph
 from nav_assistant.obstacle.detector import ObstacleDetector
 from nav_assistant.perception.object_detector import ObjectClassifier
 from nav_assistant.sensors.tof import ToFSensor
@@ -55,6 +61,27 @@ def _handle_sigint(sig, frame) -> None:
 def load_config() -> dict:
     with open(_CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+def localize_current_position(
+    webcam: WebcamSensor,
+    location_recognizer: PlaceRecognizer,
+    attempts: int = 5,
+    interval_s: float = 0.5,
+) -> str | None:
+    """
+    Try a few quick reads to recognize which trained location the user is
+    currently standing in. Returns the label, or None if no confident match
+    is found within `attempts` tries (caller should fall back to reactive
+    wall-following in that case).
+    """
+    for _ in range(attempts):
+        gray = webcam.read_gray()
+        result = location_recognizer.recognize(gray)
+        if result.is_confident and result.waypoint is not None:
+            return result.waypoint.label
+        time.sleep(interval_s)
+    return None
 
 
 def main() -> None:
@@ -155,6 +182,28 @@ def main() -> None:
                 audio.speak(f"{destination} is not a known location.")
                 audio.shutdown()
                 return
+
+            # Try to identify the current location and plan a route using
+            # any trained edges between it and the destination. If we can't
+            # localize, or no route exists between the two, navigator.evaluate()
+            # falls back to pure reactive wall-following automatically.
+            current_label = localize_current_position(webcam, location_recognizer)
+            if current_label is not None and current_label != destination:
+                route_graph = RouteGraph(env)
+                route_graph.build()
+                try:
+                    route = route_graph.plan(current_label, destination)
+                except ValueError:
+                    route = []
+                if route:
+                    navigator.set_route(route)
+                    logger.info("Planned route: %s -> %s (%d step(s))",
+                                current_label, destination, len(route))
+                else:
+                    logger.info("No trained route from '%s' to '%s' — using reactive navigation.",
+                                current_label, destination)
+            else:
+                logger.info("Could not localize starting position — using reactive navigation.")
 
             audio.speak(f"Navigating to the {destination.replace('_', ' ')}.")
 

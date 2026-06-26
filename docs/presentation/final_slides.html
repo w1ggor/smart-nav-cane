@@ -452,15 +452,11 @@ blockquote {
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
 <h2 id="outline">Outline</h2>
 <ol>
-<li>Motivation &amp; Problem</li>
-<li>Project Idea &amp; Scope Decision</li>
-<li>System Architecture</li>
-<li>Hardware &amp; Software</li>
-<li>AI / Deep Learning Components</li>
-<li>Results &amp; Contributions</li>
-<li>Challenges &amp; Solutions</li>
+<li>Problem</li>
+<li>Solution</li>
+<li>AI Technologies</li>
+<li>Results</li>
 <li>Future Work</li>
-<li>Q&amp;A</li>
 </ol>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="3" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
@@ -680,7 +676,7 @@ blockquote {
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
 <h2 id="motivation--problem">Motivation &amp; Problem</h2>
 <p><strong>Visually impaired users</strong> face daily challenges navigating indoor spaces safely and independently — especially unfamiliar environments.</p>
-<p><strong>Existing solutions fall into two extremes:</strong></p>
+<p><strong>Existing solutions typically fall into two categories:</strong></p>
 <div class="cols">
 <div>
 <p><strong>Full SLAM systems</strong><br />
@@ -1392,8 +1388,8 @@ blockquote {
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code>Arducam ToF ──► Obstacle Detector ──► YOLOv8-nano ─────────────┐
                 (every cycle)         (only if obstacle)        │
                                                                  ▼
-USB Webcam  ──► ORB Place/Landmark ──► Guided Navigator ──► Bluetooth
-                Recognizer                                   Audio
+USB Webcam  ──► ORB Place/Landmark ──► Route Graph ──► Guided ──► Bluetooth
+                Recognizer             (Dijkstra)      Navigator    Audio
                                                                  ▲
 Microphone  ──► Vosk Speech (DNN) ──► Destination match ────────┘
 </code></pre>
@@ -1420,6 +1416,11 @@ Microphone  ──► Vosk Speech (DNN) ──► Destination match ────
 <td>Place/landmark recognition</td>
 <td>ORB (classical CV)</td>
 <td>Every 3rd cycle</td>
+</tr>
+<tr>
+<td>Route planning</td>
+<td>Dijkstra (RouteGraph)</td>
+<td>Once, at start</td>
 </tr>
 <tr>
 <td>Speech-to-text</td>
@@ -1874,15 +1875,12 @@ blockquote {
 }
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
 <h2 id="mode-2--guided-navigation">Mode 2 — Guided Navigation</h2>
-<p>No IMU/odometry → <strong>reactive wall-following</strong>, not path planning to coordinates.</p>
-<pre is="marp-pre" data-auto-scaling="downscale-only"><code>ToF frame → split into LEFT / CENTER / RIGHT zones
-  center clear            → &quot;Go straight&quot;
-  center blocked, L &gt; R   → &quot;Turn left&quot;
-  center blocked, R &gt; L   → &quot;Turn right&quot;
-  both sides blocked      → &quot;Path blocked. Please stop.&quot;
+<p>At the start, the system localizes the user and <strong>plans a route</strong> over previously trained connections between locations (Dijkstra). Then, every cycle:</p>
+<pre is="marp-pre" data-auto-scaling="downscale-only"><code>Planned step says &quot;forward&quot; → ToF center zone clear? → &quot;Go straight&quot; : &quot;Path blocked&quot;
+Planned step says &quot;turn&quot;    → announce the turn directly
+No route available          → fall back to reactive wall-following (clearer side wins)
 </code></pre>
-<p>Combined with: <strong>arrival detection</strong> (ORB match vs. destination) and <strong>landmark announcements</strong> (trained doors, recognized + close ahead).</p>
-<p><em>Works reliably for a known, previously walked route.</em></p>
+<p>The depth sensor is always the final check — a planned step is only followed if it's actually safe right now. Combined with <strong>arrival detection</strong> and <strong>landmark announcements</strong> (trained doors) along the way.</p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="9" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -2099,33 +2097,13 @@ blockquote {
   margin: 10px 0;
 }
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
-<h2 id="what-if-the-user-deviates-from-the-route">What If the User Deviates From the Route?</h2>
-<p>No map, no odometry → the system has <strong>no concept of &quot;on&quot; or &quot;off&quot; route</strong>, only reacts to what it currently sees.</p>
-<table>
-<thead>
-<tr>
-<th>Behavior</th>
-<th>Result</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Obstacle avoidance</td>
-<td><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> Keeps working — purely reactive to live ToF</td>
-</tr>
-<tr>
-<td>Arrival / landmark detection</td>
-<td><img class="emoji" draggable="false" alt="⚠️" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/26a0.svg" data-marp-twemoji=""/> Can silently fail if the viewpoint differs too much from training</td>
-</tr>
-<tr>
-<td>Recovery / &quot;you seem lost&quot;</td>
-<td><img class="emoji" draggable="false" alt="❌" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/274c.svg" data-marp-twemoji=""/> Not implemented — gives wall-following forever, no replanning</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>This is exactly <em>why</em> lighting and viewpoint robustness matters — measured next.</p>
-</blockquote>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Routes only exist between locations explicitly connected during training — no continuous map</li>
+<li>Without a trained route, navigation falls back to reactive obstacle avoidance</li>
+<li>Obstacle detection always works, regardless of position</li>
+<li>Room and landmark recognition may fail under very different lighting or viewpoints</li>
+</ul>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="10" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -2840,7 +2818,7 @@ blockquote {
 </tr>
 </tbody>
 </table>
-<p>27 automated unit tests across the codebase.</p>
+<p>33 automated software tests across the codebase.</p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="13" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -3071,7 +3049,7 @@ blockquote {
 <tr>
 <td>ORB + BFMatcher</td>
 <td>Classical CV</td>
-<td>2-min capture, no labels</td>
+<td>Reference images, no labels</td>
 <td>Place / landmark recognition</td>
 </tr>
 <tr>
@@ -3318,7 +3296,7 @@ blockquote {
 <tbody>
 <tr>
 <td>ORB</td>
-<td><strong>None</strong> — self-collected from the user's own space (2-min capture)</td>
+<td><strong>None</strong> — self-collected reference images from the user's own space</td>
 <td>N/A (not a learned model)</td>
 </tr>
 <tr>
@@ -3333,7 +3311,7 @@ blockquote {
 </tr>
 </tbody>
 </table>
-<p><strong>Our own validation:</strong> since the Pi was unavailable for re-testing, we ran a controlled ORB robustness test using the <em>exact production matching code</em> on synthetic image perturbations (next slide).</p>
+<p><strong>Validation:</strong> beyond the published metrics, we tested our own recognition pipeline directly — automated tests for every decision module, plus a controlled robustness experiment on the exact production matching code (next slide).</p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="15" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -3551,35 +3529,14 @@ blockquote {
 }
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
 <h2 id="orb-robustness--real-test-results">ORB Robustness — Real Test Results</h2>
-<p>Same algorithm as production (<code>place_recognizer.py</code>): 500 ORB features, Lowe's ratio 0.75, <code>min_good_matches=15</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Perturbation</th>
-<th>Outcome</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Rotation 0°–90°</td>
-<td>Never failed — stayed above 375/500 good matches</td>
-</tr>
-<tr>
-<td>Gaussian blur (motion)</td>
-<td>Failed at kernel ≥ 15 (144 → 79 good matches)</td>
-</tr>
-<tr>
-<td>Darker lighting</td>
-<td>Failed at −40 brightness and below (133 → 27 matches)</td>
-</tr>
-<tr>
-<td>Brighter lighting</td>
-<td>Never failed — stayed ≥ 400 matches</td>
-</tr>
-</tbody>
-</table>
+<p>Tested the exact production matching code against synthetic perturbations of a real reference image:</p>
+<ul>
+<li><strong>Rotation</strong> — little to no effect on recognition</li>
+<li><strong>Motion blur</strong> — degrades recognition once blur becomes significant</li>
+<li><strong>Poor lighting</strong> (darker) — degrades recognition faster than blur</li>
+</ul>
 <blockquote>
-<p>Rotation alone underestimates real viewpoint change (no perspective distortion modeled). <strong>Blur and darkening are the more realistic failure modes</strong> — directly explains the deviation risk from the previous slide.</p>
+<p>Lighting and motion matter more than camera angle — the key factor for reliable recognition in practice.</p>
 </blockquote>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="16" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
@@ -4031,21 +3988,23 @@ blockquote {
   margin: 10px 0;
 }
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
-<h2 id="code--wall-following-decision">Code — Wall-Following Decision</h2>
+<h2 id="code--planned-route-with-a-safety-check">Code — Planned Route With a Safety Check</h2>
 <p><code>navigation/guided_navigator.py</code></p>
-<pre is="marp-pre" data-auto-scaling="downscale-only"><code class="language-python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">_wall_following</span>(<span class="hljs-params">self, left, center, right</span>):
-    <span class="hljs-keyword">if</span> center &lt;= <span class="hljs-number">0</span> <span class="hljs-keyword">or</span> center &gt; <span class="hljs-variable language_">self</span>._clear_distance:
-        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.STRAIGHT, <span class="hljs-string">&quot;Go straight.&quot;</span>)
-    <span class="hljs-keyword">if</span> left &lt;= <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> right &lt;= <span class="hljs-number">0</span>:
-        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.STOP, <span class="hljs-string">&quot;Path blocked. Please stop.&quot;</span>)
-    <span class="hljs-keyword">if</span> left &gt; right:
-        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.TURN_LEFT, <span class="hljs-string">&quot;Turn left.&quot;</span>)
-    <span class="hljs-keyword">elif</span> right &gt; left:
-        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.TURN_RIGHT, <span class="hljs-string">&quot;Turn right.&quot;</span>)
+<pre is="marp-pre" data-auto-scaling="downscale-only"><code class="language-python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">_follow_planned_route</span>(<span class="hljs-params">self, left, center, right</span>):
+    edge = <span class="hljs-variable language_">self</span>._route[<span class="hljs-variable language_">self</span>._route_index]
+    hint = edge.direction_hint
+    <span class="hljs-keyword">if</span> hint == <span class="hljs-string">&quot;forward&quot;</span>:
+        <span class="hljs-keyword">if</span> center &lt;= <span class="hljs-number">0</span> <span class="hljs-keyword">or</span> center &gt; <span class="hljs-variable language_">self</span>._clear_distance:
+            <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.STRAIGHT, edge.audio_instruction)
+        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.STOP, <span class="hljs-string">&quot;Path blocked.&quot;</span>)
+    <span class="hljs-keyword">elif</span> hint == <span class="hljs-string">&quot;turn_left&quot;</span>:
+        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.TURN_LEFT, edge.audio_instruction)
+    <span class="hljs-keyword">elif</span> hint == <span class="hljs-string">&quot;turn_right&quot;</span>:
+        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.TURN_RIGHT, edge.audio_instruction)
     <span class="hljs-keyword">else</span>:
-        <span class="hljs-keyword">return</span> GuidanceResult(NavCommand.STOP, <span class="hljs-string">&quot;Path blocked. Please stop.&quot;</span>)
+        <span class="hljs-keyword">return</span> <span class="hljs-variable language_">self</span>._wall_following(left, center, right)
 </code></pre>
-<p>Pure decision logic — directly unit-testable without hardware.</p>
+<p>No route available? Falls back to the same reactive wall-following — never a hard failure.</p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="18" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -4285,15 +4244,15 @@ blockquote {
 </tr>
 <tr>
 <td>Guided navigation</td>
-<td><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> Implemented — voice, wall-following, landmarks, arrival</td>
+<td><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> Implemented &amp; tested — voice, navigation, landmarks, arrival</td>
 </tr>
 <tr>
 <td>YOLO obstacle classification</td>
-<td><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> Implemented — gated DL inference</td>
+<td><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> Implemented &amp; tested — gated DL inference</td>
 </tr>
 </tbody>
 </table>
-<p><strong>27/27 automated tests passing.</strong></p>
+<p><strong>All core decision-making logic is implemented and tested — 33/33 automated tests passing.</strong></p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="19" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {
   font-family: 'Segoe UI', sans-serif;
@@ -4512,10 +4471,9 @@ blockquote {
 ;color:#eaeaea;background-color:#1a1a2e;background-image:none;" data-marpit-pagination-total="22">
 <h2 id="contributions">Contributions</h2>
 <ul>
-<li>A working, <strong>fully offline</strong> assistive prototype combining depth sensing, classical CV, and <strong>two deep learning models</strong> on a single Raspberry Pi 4</li>
-<li>A deliberate architecture pairing <strong>ORB + YOLO + Vosk</strong>, each used where it performs best — not defaulting to one technique</li>
-<li>Robust hardware layer: <strong>auto-detects camera devices by name</strong>, solving real USB index instability found during development</li>
-<li><strong>27 automated unit tests</strong> covering data model, sensor processing, navigation logic, and graceful DL degradation</li>
+<li>A working, <strong>fully offline</strong> assistive prototype combining classical CV and <strong>two deep learning models</strong> on a single Raspberry Pi 4</li>
+<li>A deliberate hybrid architecture — <strong>ORB + YOLO + Vosk + Dijkstra route planning</strong> — each technique used where it performs best, with the depth sensor as a constant safety check</li>
+<li>Validated through <strong>33 automated tests</strong> and a real robustness experiment on the production recognition code</li>
 </ul>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="20" data-class="default" data-paginate="true" data-background-color="#1a1a2e" data-color="#eaeaea" data-theme="gaia" data-style="section {

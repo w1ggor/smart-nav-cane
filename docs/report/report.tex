@@ -184,7 +184,7 @@ Vosk acoustic model & Deep learning (DNN-HMM, pretrained) & None (uses public En
 \node[proc, below=of orb] (stt) {Vosk Speech\\Recognizer (DNN)};
 
 \node[proc, right=1.6cm of obs] (yolo) {YOLOv8-nano\\Classifier};
-\node[proc, right=1.6cm of orb] (nav) {Guided\\Navigator};
+\node[proc, right=1.6cm of orb] (nav) {RouteGraph +\\Guided Navigator};
 
 \node[sensor, right=1.8cm of yolo, fill=accent!25] (audio) {Bluetooth\\Audio Output};
 
@@ -229,16 +229,20 @@ Audio output & espeak-ng (TTS) via subprocess & On event \\
 \label{tab:loop}
 \end{table}
 
-\subsection{Guided Navigation — Reactive Wall-Following}
-Without an IMU or wheel odometry, the system cannot plan a path to arbitrary coordinates the way SLAM-based navigation does. Instead, guided navigation reacts to the live ToF depth frame every cycle, split into three vertical zones (left, center, right):
+\subsection{Guided Navigation — Planned Route With a Reactive Safety Check}
+\label{sec:guided-nav}
+Without an IMU or wheel odometry, the system cannot do continuous geometric path planning the way SLAM-based navigation does. Instead, it plans at a coarser, discrete level: at the start of a navigation session, the system localizes the user's current position and queries \texttt{RouteGraph} (Dijkstra over previously trained \texttt{WaypointEdge} records, authored via the \texttt{edge} command in \texttt{train.py}) for a sequence of edges connecting the current location to the destination. \texttt{GuidedNavigator} then follows that route step by step:
 
 \begin{itemize}[leftmargin=1.4cm]
-  \item Center zone clear $\rightarrow$ \textit{``Go straight.''}
-  \item Center zone blocked, one side clearer $\rightarrow$ \textit{``Turn left''} / \textit{``Turn right.''}
-  \item Both sides blocked $\rightarrow$ \textit{``Path blocked. Please stop.''}
+  \item Each route step carries a \texttt{direction\_hint} (\textit{forward}, \textit{turn\_left}, \textit{turn\_right}, \textit{turn\_around}) and a spoken \texttt{audio\_instruction}, both authored during training (the \texttt{edge} command in \texttt{train.py}).
+  \item A \textit{forward} step is announced as ``go straight'' only if the live ToF center zone actually confirms the path is clear right now — the depth sensor is a standing safety check against a stale plan, never bypassed.
+  \item Turn steps are announced directly from the trained hint.
+  \item Reaching a step's target waypoint (recognized via ORB) advances to the next step; reaching the final destination ends the session.
 \end{itemize}
 
-This is combined with two independently loaded ORB recognizers: a \emph{location} recognizer (checks for arrival at the destination) and a \emph{landmark} recognizer (announces trained features such as doors when they are recognized close ahead). This approach works reliably for a previously walked, fixed route — a deliberate, honest trade-off documented further in Section~\ref{sec:future}.
+If no route exists between the recognized starting location and the destination — because no edges were trained between them, or because the starting position could not be confidently recognized — navigation falls back automatically to pure reactive wall-following: the forward view is split into three vertical zones (left, center, right), and the system turns toward whichever side has more clearance when the center is blocked. This fallback is always available and never fails outright; it is simply less directed than a planned route.
+
+This is combined with two independently loaded ORB recognizers: a \emph{location} recognizer (checks for arrival at the destination and for reaching intermediate route steps) and a \emph{landmark} recognizer (announces trained features such as doors when they are recognized close ahead). The planned route only ever covers locations explicitly connected during training — it is not a continuous map and does not generalize to unvisited layouts, a deliberate, honest trade-off documented further in Section~\ref{sec:future}.
 
 \subsection{Behavior Under Path Deviation}
 \label{sec:deviation}
@@ -495,11 +499,11 @@ Brightness increase (brighter) & Good matches remained $\geq$ 400 across all lev
   \item A working, fully offline assistive prototype combining depth sensing, computer vision, and two deep learning models on a single Raspberry Pi 4.
   \item A deliberate, documented architecture that pairs classical CV (ORB) and deep learning (YOLO, Vosk) by matching each technique to where it performs best, rather than defaulting to one approach.
   \item A robust hardware abstraction layer that automatically detects camera devices by name, solving a real instability (USB device indices changing across reboots) discovered during development.
-  \item 27 automated unit tests covering the data model, sensor processing, navigation decision logic, and DL integration's graceful degradation.
+  \item 33 automated unit tests covering the data model, sensor processing, navigation decision logic, and DL integration's graceful degradation.
 \end{itemize}
 
 \subsection{Engineering Challenges}
-This section focuses on the four challenges that most shaped the project's architecture and process, rather than a full bug list (several smaller hardware integration fixes are documented in the project's change history).
+This section focuses on the three challenges that most shaped the project's architecture and process, rather than a full bug list (several smaller hardware integration fixes are documented in the project's change history).
 
 \subsubsection{Challenge 1: Full SLAM Was Infeasible — Redesigning Around It}
 The original project plan was full Visual SLAM (e.g. ORB-SLAM3): build a 3D map in real time and plan routes to arbitrary destinations. Partway into development it became clear this was not achievable with the available hardware and timeline — there is no IMU, no wheel odometry, and a single CPU-only Raspberry Pi 4, all of which SLAM implementations typically depend on for motion estimation between frames. Rather than attempting it anyway and shipping an unreliable map, we treated this as a scope decision, not a failure: the system was redesigned around two narrower but achievable modes — passive awareness and reactive wall-following guided navigation (Sections~\ref{sec:design}--\ref{sec:deviation}) — while keeping SLAM as an explicit, documented future-work item (Section~\ref{sec:future}) rather than silently dropping it.
@@ -513,10 +517,7 @@ Visual place recognition's reliability turned out to depend heavily on how train
 \end{enumerate}
 This is a direct, practical illustration of why dataset \emph{construction methodology} matters as much as dataset \emph{size} for a classical CV technique with no learned generalization.
 
-\subsubsection{Challenge 3: A Thread-Safety Bug That Only Appeared on a Different Platform}
-While preparing this submission without access to the Raspberry Pi, we built a desktop demo tool (running on Windows) and discovered a real bug invisible on the original target platform: the \texttt{pyttsx3} text-to-speech fallback shares one engine instance between a background ``speak'' thread and the main thread's ``alert'' call. On Windows, \texttt{pyttsx3}'s SAPI5 driver is COM-based and apartment-threaded, meaning a single engine instance may only safely be called from the thread that created it — calling it from a second thread silently hangs with no exception. The fix creates a fresh, short-lived engine inside every call, scoped entirely to whichever thread is using it. This had no effect on the Raspberry Pi, which uses the \texttt{espeak-ng} subprocess backend instead (each call is an independent process, inherently thread-safe) — but would have caused a hard-to-diagnose hang for any future Windows or macOS deployment.
-
-\subsubsection{Challenge 4: Gating Deep Learning Inference Behind a Cheap Check}
+\subsubsection{Challenge 3: Gating Deep Learning Inference Behind a Cheap Check}
 Running YOLOv8-nano on every frame would be too slow for real-time use on a CPU-only Raspberry Pi 4. The solution (Section~\ref{sec:ai}) runs the cheap ToF depth threshold every cycle as before, and only invokes the CNN on the webcam frame after an obstacle has already been flagged — paying the deep learning inference cost only when it is actually useful.
 
 % ===================================================================

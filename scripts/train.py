@@ -26,8 +26,10 @@ Tips:
   - More descriptors = more robust recognition. Aim for 1000+ per location.
   - Use 'landmark' for features along a path (doors, stairs) that should
     be announced while navigating but never selected as a destination.
-  - 'edge' connections between locations are stored for future navigation
-    but are not required for the awareness or guided navigation systems.
+  - 'edge' connections between locations let navigate_voice.py plan a
+    route (direction hint + spoken instruction per step) instead of
+    falling back to pure reactive wall-following. Without edges, guided
+    navigation still works, just without a planned route.
 """
 
 from __future__ import annotations

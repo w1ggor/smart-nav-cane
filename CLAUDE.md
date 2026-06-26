@@ -53,22 +53,23 @@ Webcam frame → PlaceRecognizer → audio announce if location changes
 
 The loop is intentionally simple — no state machine, no route planning, no graph traversal.
 
-### Guided Navigation — Reactive Wall-Following (no IMU/odometry)
-There is no IMU and no wheel encoder on this hardware, so the guided navigation mode does **not** plan a path to arbitrary coordinates the way SLAM-based navigation would. Instead it reacts to the live ToF depth frame every cycle:
+### Guided Navigation — Planned Route + Reactive Safety Check (no IMU/odometry)
+There is no IMU and no wheel encoder on this hardware, so navigation cannot do continuous geometric path planning the way SLAM-based navigation would. Instead, `navigate_voice.py` builds a **discrete planned route** from trained `WaypointEdge` records (via `RouteGraph`, Dijkstra over edge `steps`) between the recognized starting location and the destination. `GuidedNavigator.evaluate()` follows that route step by step:
 
 ```
-ToF frame → split into left / center / right zones (zone_depths())
-  center clear  → "Go straight"
-  center blocked, left clearer  → "Turn left"
-  center blocked, right clearer → "Turn right"
-  both sides blocked            → "Path blocked. Please stop."
+At the start: localize_current_position() → RouteGraph.plan(current, destination) → set_route(edges)
+Each cycle:
+  current route step's direction_hint == "forward" → check ToF center zone is actually clear → "Go straight" / "Path blocked"
+  direction_hint == "turn_left" / "turn_right" / "turn_around" → announce the turn directly
+  reach the step's target waypoint (recognized) → advance to the next step
+  no route available (no edges trained, or starting position not recognized) → fall back to pure reactive wall-following (zone_depths(), pick the clearer side)
 ```
 
-This is combined with two ORB recognizers:
-- **Location recognizer** (`kind="location"`) — checked every cycle; if the current view matches the destination label with sufficient confidence, guidance ends with "You have arrived."
+The ToF depth check is never bypassed even when following the plan — a "forward" step is only followed if the center zone is actually clear right now; otherwise the system stops and warns instead of blindly trusting a stale plan. This is combined with two ORB recognizers:
+- **Location recognizer** (`kind="location"`) — checked every cycle; if the current view matches the destination label with sufficient confidence, guidance ends with "You have arrived." Also used to detect when an intermediate route step has been reached, advancing to the next edge.
 - **Landmark recognizer** (`kind="landmark"`) — trained the same way as locations (e.g. capture a door), but announced ("Door ahead.") rather than treated as a destination, only when recognized AND within `landmark_distance_m` on the ToF center zone.
 
-**Important limitation:** this approach works for a known, previously walked route in a fixed environment — it reacts correctly to walls and openings it can currently see, but it has no memory of the overall layout and cannot route around an obstacle to reach a destination it can't directly perceive. True path planning would need IMU/odometry or SLAM (see Future Work).
+**Important limitation:** the "planned route" is a sequence of previously trained edges, not a continuous geometric map — it only works between locations that were explicitly connected during training (`train.py`'s `edge` command), and it reacts correctly only to what the depth sensor currently sees, not to obstacles outside any sensor's view. If no route exists between the recognized start and the destination, navigation falls back to the same reactive wall-following as before. True continuous path planning would need IMU/odometry or SLAM (see Future Work).
 
 ### Voice Destination Input — Vosk (offline STT)
 `navigate_voice.py` asks "Where do you want to go?" and listens via the default microphone (Bluetooth headset mic or USB). Speech is transcribed locally using [Vosk](https://alphacephei.com/vosk/models) (`vosk-model-small-en-us-0.15`, ~40MB) — no internet, no cloud STT. The transcribed text is matched against the trained `location` labels by substring match; the first match wins. If no Vosk model is installed, `--destination <label>` bypasses voice entirely.
@@ -122,9 +123,9 @@ src/nav_assistant/
 ├── localization/
 │   └── place_recognizer.py   # ORB matching → current location/landmark, filterable by kind
 ├── navigation/
-│   ├── guided_navigator.py   # GuidedNavigator: wall-following + landmark + arrival
-│   ├── route_graph.py        # Dijkstra route planning (future — not used today)
-│   └── navigator.py          # Graph-based nav state machine (future — not used today)
+│   ├── guided_navigator.py   # GuidedNavigator: planned-route steps + reactive safety check + landmark + arrival
+│   ├── route_graph.py        # RouteGraph: Dijkstra over trained WaypointEdges — used by navigate_voice.py
+│   └── navigator.py          # Older graph-based nav state machine (superseded by GuidedNavigator.set_route — not used today)
 ├── speech/
 │   └── recognizer.py         # VoiceRecognizer: offline Vosk STT for destination input
 ├── obstacle/

@@ -242,3 +242,70 @@ def test_wall_following_fully_blocked_stops():
     nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
     result = nav._wall_following(left=0.0, center=0.4, right=0.0)
     assert result.command == NavCommand.STOP
+
+
+# ---- GuidedNavigator planned-route following ----
+
+def _make_edge(to_id="wp_b", direction_hint="forward", instruction="Go straight."):
+    return WaypointEdge(
+        from_id="wp_a", to_id=to_id, steps=10,
+        direction_hint=direction_hint, audio_instruction=instruction,
+    )
+
+
+def test_no_route_set_has_no_route():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None)
+    assert nav.has_route is False
+
+
+def test_set_route_enables_has_route():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None)
+    nav.set_route([_make_edge()])
+    assert nav.has_route is True
+
+
+def test_follow_planned_route_forward_when_clear():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
+    nav.set_route([_make_edge(direction_hint="forward", instruction="Walk forward 10 steps.")])
+    result = nav._follow_planned_route(left=2.0, center=2.0, right=2.0)
+    assert result.command == NavCommand.STRAIGHT
+    assert result.message == "Walk forward 10 steps."
+
+
+def test_follow_planned_route_forward_overridden_when_blocked():
+    """Safety check: the plan says forward, but the ToF frame disagrees — must not blindly follow the plan."""
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None, clear_distance_m=1.0)
+    nav.set_route([_make_edge(direction_hint="forward", instruction="Walk forward 10 steps.")])
+    result = nav._follow_planned_route(left=2.0, center=0.3, right=2.0)
+    assert result.command == NavCommand.STOP
+
+
+def test_follow_planned_route_turn_left():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator, NavCommand
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None)
+    nav.set_route([_make_edge(direction_hint="turn_left", instruction="Turn left at the wall.")])
+    result = nav._follow_planned_route(left=2.0, center=0.3, right=0.3)
+    assert result.command == NavCommand.TURN_LEFT
+    assert result.message == "Turn left at the wall."
+
+
+def test_advance_route_if_at_target_waypoint():
+    from nav_assistant.navigation.guided_navigator import GuidedNavigator
+    nav = GuidedNavigator(location_recognizer=None, landmark_recognizer=None)
+    nav.set_route([_make_edge(to_id="wp_b"), _make_edge(to_id="wp_c")])
+    assert nav._route_index == 0
+
+    nav._advance_route_if_at("wp_b")
+    assert nav._route_index == 1
+
+    # Recognizing an unrelated waypoint should not advance further
+    nav._advance_route_if_at("not_in_route")
+    assert nav._route_index == 1
+
+    nav._advance_route_if_at("wp_c")
+    assert nav._route_index == 2
+    assert nav.has_route is False  # route exhausted

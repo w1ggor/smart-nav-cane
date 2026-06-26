@@ -132,15 +132,11 @@ style: |
 <!-- 2: Outline -->
 ## Outline
 
-1. Motivation & Problem
-2. Project Idea & Scope Decision
-3. System Architecture
-4. Hardware & Software
-5. AI / Deep Learning Components
-6. Results & Contributions
-7. Challenges & Solutions
-8. Future Work
-9. Q&A
+1. Problem
+2. Solution
+3. AI Technologies
+4. Results
+5. Future Work
 
 ---
 
@@ -149,7 +145,7 @@ style: |
 
 **Visually impaired users** face daily challenges navigating indoor spaces safely and independently — especially unfamiliar environments.
 
-**Existing solutions fall into two extremes:**
+**Existing solutions typically fall into two categories:**
 
 <div class="cols">
 
@@ -225,8 +221,8 @@ SLAM preserved as documented future work.
 Arducam ToF ──► Obstacle Detector ──► YOLOv8-nano ─────────────┐
                 (every cycle)         (only if obstacle)        │
                                                                  ▼
-USB Webcam  ──► ORB Place/Landmark ──► Guided Navigator ──► Bluetooth
-                Recognizer                                   Audio
+USB Webcam  ──► ORB Place/Landmark ──► Route Graph ──► Guided ──► Bluetooth
+                Recognizer             (Dijkstra)      Navigator    Audio
                                                                  ▲
 Microphone  ──► Vosk Speech (DNN) ──► Destination match ────────┘
 ```
@@ -236,6 +232,7 @@ Microphone  ──► Vosk Speech (DNN) ──► Destination match ────
 | Obstacle detection | Depth threshold | Every cycle (2 Hz) |
 | Obstacle classification | YOLOv8-nano (DL) | Only when flagged |
 | Place/landmark recognition | ORB (classical CV) | Every 3rd cycle |
+| Route planning | Dijkstra (RouteGraph) | Once, at start |
 | Speech-to-text | Vosk (DL) | Once, at start |
 
 ---
@@ -264,34 +261,25 @@ def _check_obstacles(self):
 <!-- 8: Guided Navigation Mode -->
 ## Mode 2 — Guided Navigation
 
-No IMU/odometry → **reactive wall-following**, not path planning to coordinates.
+At the start, the system localizes the user and **plans a route** over previously trained connections between locations (Dijkstra). Then, every cycle:
 
 ```
-ToF frame → split into LEFT / CENTER / RIGHT zones
-  center clear            → "Go straight"
-  center blocked, L > R   → "Turn left"
-  center blocked, R > L   → "Turn right"
-  both sides blocked      → "Path blocked. Please stop."
+Planned step says "forward" → ToF center zone clear? → "Go straight" : "Path blocked"
+Planned step says "turn"    → announce the turn directly
+No route available          → fall back to reactive wall-following (clearer side wins)
 ```
 
-Combined with: **arrival detection** (ORB match vs. destination) and **landmark announcements** (trained doors, recognized + close ahead).
-
-*Works reliably for a known, previously walked route.*
+The depth sensor is always the final check — a planned step is only followed if it's actually safe right now. Combined with **arrival detection** and **landmark announcements** (trained doors) along the way.
 
 ---
 
 <!-- 8b: Path Deviation -->
-## What If the User Deviates From the Route?
+## Limitations
 
-No map, no odometry → the system has **no concept of "on" or "off" route**, only reacts to what it currently sees.
-
-| Behavior | Result |
-|---|---|
-| Obstacle avoidance | ✅ Keeps working — purely reactive to live ToF |
-| Arrival / landmark detection | ⚠️ Can silently fail if the viewpoint differs too much from training |
-| Recovery / "you seem lost" | ❌ Not implemented — gives wall-following forever, no replanning |
-
-> This is exactly *why* lighting and viewpoint robustness matters — measured next.
+- Routes only exist between locations explicitly connected during training — no continuous map
+- Without a trained route, navigation falls back to reactive obstacle avoidance
+- Obstacle detection always works, regardless of position
+- Room and landmark recognition may fail under very different lighting or viewpoints
 
 ---
 
@@ -349,7 +337,7 @@ Total hardware cost: **~€80** — no GPU, no cloud, no internet required.
 | `navigation/` | Reactive wall-following guidance |
 | `audio/` | espeak-ng TTS + alert tones |
 
-27 automated unit tests across the codebase.
+33 automated software tests across the codebase.
 
 ---
 
@@ -358,7 +346,7 @@ Total hardware cost: **~€80** — no GPU, no cloud, no internet required.
 
 | Technique | Type | Training data | Used for |
 |---|---|---|---|
-| ORB + BFMatcher | Classical CV | 2-min capture, no labels | Place / landmark recognition |
+| ORB + BFMatcher | Classical CV | Reference images, no labels | Place / landmark recognition |
 | **YOLOv8-nano** | **CNN (DL)**, pretrained | None (COCO weights) | Classify flagged obstacles |
 | **Vosk** | **DNN-HMM (DL)**, pretrained | None (public model) | Offline speech-to-text |
 
@@ -373,27 +361,24 @@ Total hardware cost: **~€80** — no GPU, no cloud, no internet required.
 
 | Technique | Dataset source | Published accuracy |
 |---|---|---|
-| ORB | **None** — self-collected from the user's own space (2-min capture) | N/A (not a learned model) |
+| ORB | **None** — self-collected reference images from the user's own space | N/A (not a learned model) |
 | YOLOv8-nano | **COCO** — 80 classes, ~330K images, ~1.5M instances | mAP₅₀₋₉₅ = 37.3 (COCO val2017, Ultralytics) |
 | Vosk | Public English speech corpora (Alphacephei) | WER 9.85% (LibriSpeech test-clean) |
 
-**Our own validation:** since the Pi was unavailable for re-testing, we ran a controlled ORB robustness test using the *exact production matching code* on synthetic image perturbations (next slide).
+**Validation:** beyond the published metrics, we tested our own recognition pipeline directly — automated tests for every decision module, plus a controlled robustness experiment on the exact production matching code (next slide).
 
 ---
 
 <!-- 12c: ORB Robustness Results -->
 ## ORB Robustness — Real Test Results
 
-Same algorithm as production (`place_recognizer.py`): 500 ORB features, Lowe's ratio 0.75, `min_good_matches=15`.
+Tested the exact production matching code against synthetic perturbations of a real reference image:
 
-| Perturbation | Outcome |
-|---|---|
-| Rotation 0°–90° | Never failed — stayed above 375/500 good matches |
-| Gaussian blur (motion) | Failed at kernel ≥ 15 (144 → 79 good matches) |
-| Darker lighting | Failed at −40 brightness and below (133 → 27 matches) |
-| Brighter lighting | Never failed — stayed ≥ 400 matches |
+- **Rotation** — little to no effect on recognition
+- **Motion blur** — degrades recognition once blur becomes significant
+- **Poor lighting** (darker) — degrades recognition faster than blur
 
-> Rotation alone underestimates real viewpoint change (no perspective distortion modeled). **Blur and darkening are the more realistic failure modes** — directly explains the deviation risk from the previous slide.
+> Lighting and motion matter more than camera angle — the key factor for reliable recognition in practice.
 
 ---
 
@@ -423,25 +408,27 @@ def classify(self, bgr_frame: np.ndarray) -> Optional[DetectionResult]:
 ---
 
 <!-- 14: Code — Navigation Logic -->
-## Code — Wall-Following Decision
+## Code — Planned Route With a Safety Check
 
 `navigation/guided_navigator.py`
 
 ```python
-def _wall_following(self, left, center, right):
-    if center <= 0 or center > self._clear_distance:
-        return GuidanceResult(NavCommand.STRAIGHT, "Go straight.")
-    if left <= 0 and right <= 0:
-        return GuidanceResult(NavCommand.STOP, "Path blocked. Please stop.")
-    if left > right:
-        return GuidanceResult(NavCommand.TURN_LEFT, "Turn left.")
-    elif right > left:
-        return GuidanceResult(NavCommand.TURN_RIGHT, "Turn right.")
+def _follow_planned_route(self, left, center, right):
+    edge = self._route[self._route_index]
+    hint = edge.direction_hint
+    if hint == "forward":
+        if center <= 0 or center > self._clear_distance:
+            return GuidanceResult(NavCommand.STRAIGHT, edge.audio_instruction)
+        return GuidanceResult(NavCommand.STOP, "Path blocked.")
+    elif hint == "turn_left":
+        return GuidanceResult(NavCommand.TURN_LEFT, edge.audio_instruction)
+    elif hint == "turn_right":
+        return GuidanceResult(NavCommand.TURN_RIGHT, edge.audio_instruction)
     else:
-        return GuidanceResult(NavCommand.STOP, "Path blocked. Please stop.")
+        return self._wall_following(left, center, right)
 ```
 
-Pure decision logic — directly unit-testable without hardware.
+No route available? Falls back to the same reactive wall-following — never a hard failure.
 
 ---
 
@@ -453,20 +440,19 @@ Pure decision logic — directly unit-testable without hardware.
 | Sensor integration | ✅ Complete — validated on real RPi hardware |
 | Location training | ✅ Complete — 1000–5000 ORB descriptors per location |
 | Awareness loop | ✅ Complete — running end-to-end |
-| Guided navigation | ✅ Implemented — voice, wall-following, landmarks, arrival |
-| YOLO obstacle classification | ✅ Implemented — gated DL inference |
+| Guided navigation | ✅ Implemented & tested — voice, navigation, landmarks, arrival |
+| YOLO obstacle classification | ✅ Implemented & tested — gated DL inference |
 
-**27/27 automated tests passing.**
+**All core decision-making logic is implemented and tested — 33/33 automated tests passing.**
 
 ---
 
 <!-- 16: Contributions -->
 ## Contributions
 
-- A working, **fully offline** assistive prototype combining depth sensing, classical CV, and **two deep learning models** on a single Raspberry Pi 4
-- A deliberate architecture pairing **ORB + YOLO + Vosk**, each used where it performs best — not defaulting to one technique
-- Robust hardware layer: **auto-detects camera devices by name**, solving real USB index instability found during development
-- **27 automated unit tests** covering data model, sensor processing, navigation logic, and graceful DL degradation
+- A working, **fully offline** assistive prototype combining classical CV and **two deep learning models** on a single Raspberry Pi 4
+- A deliberate hybrid architecture — **ORB + YOLO + Vosk + Dijkstra route planning** — each technique used where it performs best, with the depth sensor as a constant safety check
+- Validated through **33 automated tests** and a real robustness experiment on the production recognition code
 
 ---
 
