@@ -152,7 +152,7 @@ A central design decision was choosing, for each recognition task, whether class
 \textbf{Technique} & \textbf{Type} & \textbf{Training data needed} & \textbf{Used for} \\
 \midrule
 ORB + BFMatcher & Classical CV (hand-engineered features) & A 2-minute capture session per location/landmark, no labeling & Place and landmark recognition \\
-YOLOv8-nano & Deep learning (CNN, pretrained) & None (uses public COCO weights) & Classifying generic obstacles (chair, person, etc.) \\
+YOLOv8-nano & Deep learning (CNN, pretrained) & None (uses public COCO weights) & Classifying generic obstacles (table, person, etc.) \\
 Vosk acoustic model & Deep learning (DNN-HMM, pretrained) & None (uses public English model) & Offline speech-to-text for destination input \\
 \bottomrule
 \end{tabularx}
@@ -315,7 +315,7 @@ The project guidelines require an explicit AI (ML/DL) component. Three recogniti
 
 \begin{enumerate}[leftmargin=1.4cm]
   \item \textbf{ORB feature matching} (classical computer vision, not learned) — used for visual place and landmark recognition. Chosen because it requires no training data beyond a short capture session, runs entirely on CPU, and is deterministic and debuggable.
-  \item \textbf{YOLOv8-nano} (convolutional neural network, deep learning) — a pretrained, COCO-trained object detector (80 classes, $\sim$6MB) used to classify what triggered a ToF obstacle alert (e.g. ``chair'', ``person''), turning a generic alert into a specific one.
+  \item \textbf{YOLOv8-nano} (convolutional neural network, deep learning) — a pretrained, COCO-trained object detector (80 classes, $\sim$6MB) used to classify what triggered a ToF obstacle alert (e.g. ``table'', ``person''), turning a generic alert into a specific one.
   \item \textbf{Vosk speech recognition} (deep neural network acoustic model) — used for fully offline voice destination input, with no cloud speech API involved.
 \end{enumerate}
 

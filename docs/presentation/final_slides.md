@@ -181,8 +181,8 @@ A smart cane that answers three questions in real time:
 
 <br>
 
-> *"Where do you want to go?"* → *"Kitchen"*
-> *"Chair ahead, 0.8 metres."* → *"Turn left."* → *"You have arrived."*
+> *"Where do you want to go?"* → *"Garage"*
+> *"Table ahead, 1.2 metres."* → *"Turn left."* → *"You have arrived."*
 
 ---
 
@@ -254,7 +254,7 @@ def _check_obstacles(self):
         self._audio.alert(message)
 ```
 
-**Output:** *"You are in the office."* · *"Chair ahead, 0.8 metres."*
+**Output:** *"You are in the office."* · *"Table ahead, 1.2 metres."*
 
 ---
 
